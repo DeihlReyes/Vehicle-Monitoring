@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Riding Behavior Monitor</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Dashboard Tab -->
+      <div class="tab-content" id="dashboard">
+        <div class="dashboard-grid">
+          <div class="card behavior-card">
+            <h3>Current Behavior</h3>
+            <div class="behavior-status">
+              <span id="current-behavior">Loading...</span>
+              <div class="confidence-bar">
+                <div id="confidence-level" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card stats-card">
+            <h3>Behavior Statistics</h3>
+            <div id="behavior-stats">
+              <div class="stat-item">
+                <span class="label">Normal:</span>
+                <span id="normal-count">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="label">Aggressive Acceleration:</span>
+                <span id="agg-accel-count">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="label">Aggressive Deceleration:</span>
+                <span id="agg-decel-count">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="label">Aggressive Lane Change:</span>
+                <span id="agg-lane-count">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <h3>Motion Data</h3>
+            <div id="motion-chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Behavior Tab -->
+      <div class="tab-content" id="behavior">
+        <div class="sensor-grid">
+          <div class="card">
+            <h3>Accelerometer Data</h3>
+            <div id="accelerometer-chart"></div>
+          </div>
+          <div class="card">
+            <h3>Gyroscope Data</h3>
+            <div id="gyroscope-chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OBD Info Tab -->
+      <div class="tab-content" id="obd">
+        <div class="obd-grid">
+          <div class="card">
+            <h3>Engine Data</h3>
+            <div class="obd-data">
+              <div class="obd-item">
+                <span class="label">Speed:</span>
+                <span id="speed">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">RPM:</span>
+                <span id="rpm">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">Throttle Position:</span>
+                <span id="throttle">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">Engine Load:</span>
+                <span id="engine-load">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Temperature & Pressure</h3>
+            <div class="obd-data">
+              <div class="obd-item">
+                <span class="label">Coolant Temp:</span>
+                <span id="coolant-temp">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">Intake Pressure:</span>
+                <span id="intake-pressure">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">Timing Advance:</span>
+                <span id="timing-advance">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>System Status</h3>
+            <div class="obd-data">
+              <div class="obd-item">
+                <span class="label">Fuel Status:</span>
+                <span id="fuel-status">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">O2 Sensors:</span>
+                <span id="o2-sensors">--</span>
+              </div>
+              <div class="obd-item">
+                <span class="label">Battery Voltage:</span>
+                <span id="battery-voltage">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Navigation -->
+      <nav class="bottom-nav">
+        <button class="nav-button" data-tab="dashboard">
+          <span class="material-icons">dashboard</span>
+          Dashboard
+        </button>
+        <button class="nav-button" data-tab="behavior">
+          <span class="material-icons">timeline</span>
+          Behavior
+        </button>
+        <button class="nav-button" data-tab="obd">
+          <span class="material-icons">speed</span>
+          OBD Info
+        </button>
+      </nav>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
