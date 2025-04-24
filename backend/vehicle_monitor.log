@@ -11476,3 +11476,13 @@
 2025-04-25 00:22:13,013 - __main__ - ERROR - [app.py:309] - Critical error in broadcast loop: name 'watched_commands' is not defined
 2025-04-25 00:22:13,140 - __main__ - ERROR - [app.py:309] - Critical error in broadcast loop: name 'watched_commands' is not defined
 2025-04-25 00:22:13,255 - __main__ - ERROR - [app.py:309] - Critical error in broadcast loop: name 'watched_commands' is not defined
+2025-04-25 00:42:24,829 - database - INFO - [database.py:93] - Database initialized successfully
+2025-04-25 00:42:24,830 - mpu6050 - INFO - [mpu6050.py:242] - Running on Windows - using mock MPU6050 implementation
+2025-04-25 00:42:24,931 - mpu6050 - INFO - [mpu6050.py:86] - Mock MPU6050 initialized successfully
+2025-04-25 00:42:24,931 - __main__ - INFO - [app.py:75] - MPU6050 sensor initialized successfully
+2025-04-25 00:42:24,931 - __main__ - ERROR - [app.py:102] - Failed to initialize OBD connection: module 'obd' has no attribute 'Async'
+2025-04-25 00:42:25,203 - asyncio - DEBUG - [proactor_events.py:634] - Using proactor: IocpProactor
+2025-04-25 00:42:25,697 - __main__ - INFO - [app.py:336] - Application started successfully
+2025-04-25 00:42:25,700 - database - INFO - [database.py:109] - Started new riding session with ID: 2
+2025-04-25 00:42:25,705 - __main__ - INFO - [app.py:218] - Started new riding session with ID: 2
+2025-04-25 00:42:25,707 - hypercorn.error - INFO - [logging.py:106] - Running on http://0.0.0.0:5000 (CTRL + C to quit)

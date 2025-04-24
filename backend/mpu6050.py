@@ -99,16 +99,30 @@ class MPU6050Mock(MPU6050Base):
 
         try:
             # Generate realistic-looking mock data
+            acc_x = round(random.uniform(-2, 2) * 9.81, 3)  # Simulate typical driving acceleration
+            acc_y = round(random.uniform(-1, 1) * 9.81, 3)
+            acc_z = round(-9.81 + random.uniform(-0.5, 0.5), 3)  # Mostly gravity with some noise
+            
+            gyro_x = round(random.uniform(-45, 45), 3)  # Simulate typical rotation rates
+            gyro_y = round(random.uniform(-45, 45), 3)
+            gyro_z = round(random.uniform(-20, 20), 3)
+
+            # Calculate absolute values
+            abs_acc = round(math.sqrt(acc_x**2 + acc_y**2 + acc_z**2), 3)
+            abs_gyro = round(math.sqrt(gyro_x**2 + gyro_y**2 + gyro_z**2), 3)
+
             data = {
                 'accelerometer': {
-                    'x': round(random.uniform(-2, 2) * 9.81, 3),  # Simulate typical driving acceleration
-                    'y': round(random.uniform(-1, 1) * 9.81, 3),
-                    'z': round(-9.81 + random.uniform(-0.5, 0.5), 3)  # Mostly gravity with some noise
+                    'x': acc_x,
+                    'y': acc_y,
+                    'z': acc_z,
+                    'absolute': abs_acc
                 },
                 'gyroscope': {
-                    'x': round(random.uniform(-45, 45), 3),  # Simulate typical rotation rates
-                    'y': round(random.uniform(-45, 45), 3),
-                    'z': round(random.uniform(-20, 20), 3)
+                    'x': gyro_x,
+                    'y': gyro_y,
+                    'z': gyro_z,
+                    'absolute': abs_gyro
                 }
             }
 
@@ -157,15 +171,9 @@ class MPU6050Hardware(MPU6050Base):
     def setup(self) -> None:
         """Initialize the MPU6050 with error handling"""
         try:
-            # Write to power management register
+            # Wake up the MPU6050 (write 0 to power management register)
             self.bus.write_byte_data(self.device_address, self.POWER_MGMT_1, 0)
             time.sleep(0.1)  # Wait for device to stabilize
-            
-            # Configure sampling rate, filter settings and gyro/accel range
-            self.bus.write_byte_data(self.device_address, self.SMPLRT_DIV, 7)
-            self.bus.write_byte_data(self.device_address, self.CONFIG, 0)
-            self.bus.write_byte_data(self.device_address, self.GYRO_CONFIG, 24)
-            self.bus.write_byte_data(self.device_address, self.ACCEL_CONFIG, 24)
             
             # Verify setup by reading back configuration
             if self.bus.read_byte_data(self.device_address, self.POWER_MGMT_1) != 0:
@@ -173,16 +181,13 @@ class MPU6050Hardware(MPU6050Base):
         except Exception as e:
             raise MPU6050Error(f"Setup failed: {str(e)}") from e
 
-    def read_raw_data(self, addr: int) -> int:
-        """Read raw data with error handling and validation"""
+    def read_word(self, addr: int) -> int:
+        """Read raw word data with error handling"""
         try:
             high = self.bus.read_byte_data(self.device_address, addr)
             low = self.bus.read_byte_data(self.device_address, addr + 1)
-            
-            value = ((high << 8) | low)
-            if value > 32768:
-                value = value - 65536
-            return value
+            val = (high << 8) + low
+            return val - 65536 if val > 32768 else val
         except Exception as e:
             raise MPU6050Error(f"Failed to read data from address {hex(addr)}: {str(e)}") from e
 
@@ -192,27 +197,32 @@ class MPU6050Hardware(MPU6050Base):
             raise MPU6050Error("Device not initialized")
 
         try:
-            # Read Accelerometer raw value
-            acc_x = self.read_raw_data(self.ACCEL_XOUT_H)
-            acc_y = self.read_raw_data(self.ACCEL_YOUT_H)
-            acc_z = self.read_raw_data(self.ACCEL_ZOUT_H)
+            # Read and convert accelerometer data (raw to m/s²)
+            acc_x = round(self.read_word(self.ACCEL_XOUT_H) / 16384.0 * 9.81, 3)
+            acc_y = round(self.read_word(self.ACCEL_YOUT_H) / 16384.0 * 9.81, 3)
+            acc_z = round(self.read_word(self.ACCEL_ZOUT_H) / 16384.0 * 9.81, 3)
 
-            # Read Gyroscope raw value
-            gyro_x = self.read_raw_data(self.GYRO_XOUT_H)
-            gyro_y = self.read_raw_data(self.GYRO_YOUT_H)
-            gyro_z = self.read_raw_data(self.GYRO_ZOUT_H)
+            # Read and convert gyroscope data (raw to °/s)
+            gyro_x = round(self.read_word(self.GYRO_XOUT_H) / 131.0, 3)
+            gyro_y = round(self.read_word(self.GYRO_YOUT_H) / 131.0, 3)
+            gyro_z = round(self.read_word(self.GYRO_ZOUT_H) / 131.0, 3)
 
-            # Convert to actual values
+            # Calculate absolute values
+            abs_acc = round(math.sqrt(acc_x**2 + acc_y**2 + acc_z**2), 3)
+            abs_gyro = round(math.sqrt(gyro_x**2 + gyro_y**2 + gyro_z**2), 3)
+
             data = {
                 'accelerometer': {
-                    'x': round(acc_x / 16384.0 * 9.81, 3),  # Convert to m/s²
-                    'y': round(acc_y / 16384.0 * 9.81, 3),
-                    'z': round(acc_z / 16384.0 * 9.81, 3)
+                    'x': acc_x,
+                    'y': acc_y,
+                    'z': acc_z,
+                    'absolute': abs_acc
                 },
                 'gyroscope': {
-                    'x': round(gyro_x / 131.0, 3),  # degrees/s
-                    'y': round(gyro_y / 131.0, 3),
-                    'z': round(gyro_z / 131.0, 3)
+                    'x': gyro_x,
+                    'y': gyro_y,
+                    'z': gyro_z,
+                    'absolute': abs_gyro
                 }
             }
 
