@@ -1,0 +1,97 @@
+/* Chart Container Styles */
+.chart-container {
+  width: 100%;
+  height: calc(100% - 2rem); /* Account for the header */
+  position: relative;
+  overflow: hidden;
+}
+
+/* Chart Div Styles */
+#accelerometer-chart,
+#gyroscope-chart,
+#behavior-distribution {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Plotly Chart Customizations */
+.js-plotly-plot {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.js-plotly-plot .plotly {
+  width: 100%;
+  height: 100%;
+}
+
+/* Chart Title Styles */
+.chart-title {
+  font-size: 1rem;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+/* Sensor Charts Container */
+.sensor-chart {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sensor-chart h3 {
+  margin: 0;
+  padding: 0.5rem;
+  font-size: 1.1rem;
+  color: #2c3e50;
+}
+
+/* Custom Legend Styles */
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin: 0.25rem 0;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+}
+
+.legend-label {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+/* Tooltip Customization */
+.plotly-tooltip {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid #ddd !important;
+  border-radius: 4px !important;
+  padding: 0.5rem !important;
+  font-size: 0.875rem !important;
+  color: #333 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Chart Axis Labels */
+.xtitle,
+.ytitle {
+  font-size: 0.875rem !important;
+  color: #666 !important;
+}
+
+/* Remove Plotly Logo */
+.modebar-btn[data-title="Produced with Plotly"] {
+  display: none !important;
+}
+
+/* Mode Bar Customization */
+.modebar {
+  top: 0 !important;
+  right: 0 !important;
+}

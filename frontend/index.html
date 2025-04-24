@@ -2,127 +2,106 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>Riding Behavior Monitor</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/charts.css" />
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
   </head>
   <body>
-    <div class="container">
+    <div class="app-container">
       <!-- Dashboard Tab -->
-      <div class="tab-content" id="dashboard">
+      <div class="tab-content" id="dashboard-tab">
         <div class="dashboard-grid">
-          <div class="card behavior-card">
-            <h3>Current Behavior</h3>
-            <div class="behavior-status">
-              <span id="current-behavior">Loading...</span>
-              <div class="confidence-bar">
-                <div id="confidence-level" style="width: 0%"></div>
+          <div class="behavior-summary">
+            <h2>Behavior Summary</h2>
+            <div class="behavior-stats">
+              <div class="stat-card">
+                <span class="stat-label">Aggressive Events</span>
+                <span class="stat-value" id="aggressive-count">0</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Normal Events</span>
+                <span class="stat-value" id="normal-count">0</span>
               </div>
             </div>
           </div>
-
-          <div class="card stats-card">
-            <h3>Behavior Statistics</h3>
-            <div id="behavior-stats">
-              <div class="stat-item">
-                <span class="label">Normal:</span>
-                <span id="normal-count">0</span>
-              </div>
-              <div class="stat-item">
-                <span class="label">Aggressive Acceleration:</span>
-                <span id="agg-accel-count">0</span>
-              </div>
-              <div class="stat-item">
-                <span class="label">Aggressive Deceleration:</span>
-                <span id="agg-decel-count">0</span>
-              </div>
-              <div class="stat-item">
-                <span class="label">Aggressive Lane Change:</span>
-                <span id="agg-lane-count">0</span>
-              </div>
-            </div>
+          <div class="behavior-chart">
+            <div id="behavior-distribution"></div>
           </div>
-
-          <div class="card chart-card">
-            <h3>Motion Data</h3>
-            <div id="motion-chart"></div>
+          <div class="recent-events">
+            <h2>Recent Events</h2>
+            <div id="events-list"></div>
           </div>
         </div>
       </div>
 
       <!-- Behavior Tab -->
-      <div class="tab-content" id="behavior">
+      <div class="tab-content hidden" id="behavior-tab">
         <div class="sensor-grid">
-          <div class="card">
+          <div class="sensor-chart">
             <h3>Accelerometer Data</h3>
-            <div id="accelerometer-chart"></div>
+            <div class="chart-container">
+              <div id="accelerometer-chart"></div>
+            </div>
           </div>
-          <div class="card">
+          <div class="sensor-chart">
             <h3>Gyroscope Data</h3>
-            <div id="gyroscope-chart"></div>
+            <div class="chart-container">
+              <div id="gyroscope-chart"></div>
+            </div>
+          </div>
+          <div class="current-behavior">
+            <h3>Current Behavior</h3>
+            <div class="behavior-indicator" id="behavior-status">
+              Normal Riding
+            </div>
           </div>
         </div>
       </div>
 
       <!-- OBD Info Tab -->
-      <div class="tab-content" id="obd">
+      <div class="tab-content hidden" id="obd-tab">
         <div class="obd-grid">
-          <div class="card">
-            <h3>Engine Data</h3>
-            <div class="obd-data">
-              <div class="obd-item">
-                <span class="label">Speed:</span>
-                <span id="speed">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">RPM:</span>
-                <span id="rpm">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">Throttle Position:</span>
-                <span id="throttle">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">Engine Load:</span>
-                <span id="engine-load">--</span>
-              </div>
+          <div class="obd-card" id="engine-metrics">
+            <h3>Engine Metrics</h3>
+            <div class="metric">
+              <span>RPM</span>
+              <span id="rpm-value">0</span>
+            </div>
+            <div class="metric">
+              <span>Speed</span>
+              <span id="speed-value">0 km/h</span>
+            </div>
+            <div class="metric">
+              <span>Throttle</span>
+              <span id="throttle-value">0%</span>
             </div>
           </div>
-
-          <div class="card">
-            <h3>Temperature & Pressure</h3>
-            <div class="obd-data">
-              <div class="obd-item">
-                <span class="label">Coolant Temp:</span>
-                <span id="coolant-temp">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">Intake Pressure:</span>
-                <span id="intake-pressure">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">Timing Advance:</span>
-                <span id="timing-advance">--</span>
-              </div>
+          <div class="obd-card" id="temperature-metrics">
+            <h3>Temperature</h3>
+            <div class="metric">
+              <span>Coolant</span>
+              <span id="coolant-temp">0°C</span>
+            </div>
+            <div class="metric">
+              <span>Intake</span>
+              <span id="intake-temp">0°C</span>
             </div>
           </div>
-
-          <div class="card">
+          <div class="obd-card" id="system-metrics">
             <h3>System Status</h3>
-            <div class="obd-data">
-              <div class="obd-item">
-                <span class="label">Fuel Status:</span>
-                <span id="fuel-status">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">O2 Sensors:</span>
-                <span id="o2-sensors">--</span>
-              </div>
-              <div class="obd-item">
-                <span class="label">Battery Voltage:</span>
-                <span id="battery-voltage">--</span>
-              </div>
+            <div class="metric">
+              <span>Battery</span>
+              <span id="battery-voltage">0V</span>
+            </div>
+            <div class="metric">
+              <span>Engine Load</span>
+              <span id="engine-load">0%</span>
             </div>
           </div>
         </div>
@@ -130,21 +109,22 @@
 
       <!-- Bottom Navigation -->
       <nav class="bottom-nav">
-        <button class="nav-button" data-tab="dashboard">
-          <span class="material-icons">dashboard</span>
-          Dashboard
+        <button class="nav-btn active" data-tab="dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
         </button>
-        <button class="nav-button" data-tab="behavior">
-          <span class="material-icons">timeline</span>
-          Behavior
+        <button class="nav-btn" data-tab="behavior">
+          <span class="nav-icon">🎯</span>
+          <span>Behavior</span>
         </button>
-        <button class="nav-button" data-tab="obd">
-          <span class="material-icons">speed</span>
-          OBD Info
+        <button class="nav-btn" data-tab="obd">
+          <span class="nav-icon">🔧</span>
+          <span>OBD Info</span>
         </button>
       </nav>
     </div>
-
-    <script src="script.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/websocket.js"></script>
   </body>
 </html>

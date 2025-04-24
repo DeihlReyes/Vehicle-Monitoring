@@ -25,16 +25,44 @@ class BehaviorPredictor:
         self.prediction_thread.start()
 
     def _create_model(self):
-        # Create a simple LSTM model
+        # Create a more sophisticated LSTM model with multiple layers
         model = tf.keras.Sequential([
-            tf.keras.layers.LSTM(64, input_shape=(self.sequence_length, 6)),
-            tf.keras.layers.Dense(32, activation='relu'),
+            # First LSTM layer with return sequences for stacking
+            tf.keras.layers.LSTM(256, 
+                               input_shape=(self.sequence_length, 6),
+                               return_sequences=True,
+                               activation='tanh'),
+            tf.keras.layers.Dropout(0.3),
+            
+            # Second LSTM layer
+            tf.keras.layers.LSTM(128,
+                               activation='tanh'),
+            tf.keras.layers.Dropout(0.3),
+            
+            # Dense layers for feature extraction
+            tf.keras.layers.Dense(64, activation='relu'),
+            tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Dropout(0.2),
+            
+            # Output layer
             tf.keras.layers.Dense(len(self.behaviors), activation='softmax')
         ])
-        model.compile(optimizer='adam',
-                     loss='categorical_crossentropy',
-                     metrics=['accuracy'])
+        
+        # Use a more sophisticated optimizer with learning rate scheduling
+        initial_learning_rate = 0.001
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate,
+            decay_steps=1000,
+            decay_rate=0.9,
+            staircase=True)
+        
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+        
+        model.compile(
+            optimizer=optimizer,
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
         return model
 
     def add_data_point(self, accel_data, gyro_data):
@@ -53,8 +81,12 @@ class BehaviorPredictor:
                 with self.lock:
                     # Convert buffer to numpy array
                     data = np.array(list(self.data_buffer))
-                    # Normalize data (simple scaling, you might want to use proper scaling in production)
-                    data = (data - np.mean(data, axis=0)) / (np.std(data, axis=0) + 1e-7)
+                    
+                    # Enhanced normalization using robust scaling
+                    mean = np.mean(data, axis=0)
+                    std = np.std(data, axis=0)
+                    data = (data - mean) / (std + 1e-7)
+                    
                     # Reshape for model input
                     data = np.expand_dims(data, axis=0)
                     
