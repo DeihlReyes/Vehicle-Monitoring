@@ -1,11 +1,13 @@
-from quart import Quart, websocket, jsonify
-from quart_cors import cors  # Add CORS support
+from quart import Quart, websocket, jsonify, send_from_directory
+from quart_cors import cors
 import asyncio
 import json
 from datetime import datetime
 import random
 import math
 import logging
+import os
+import time
 
 # Configure logging with more detailed format
 logging.basicConfig(
@@ -17,14 +19,27 @@ logger = logging.getLogger(__name__)
 app = Quart(__name__)
 app = cors(app, allow_origin="*")  # Enable CORS for all origins
 
+# Serve frontend files
+@app.route('/')
+async def index():
+    return await send_from_directory('../frontend', 'index.html')
+
+@app.route('/<path:path>')
+async def serve_static(path):
+    if os.path.exists(f'../frontend/{path}'):
+        return await send_from_directory('../frontend', path)
+    return "File not found", 404
+
 # Store connected WebSocket clients
 connected_clients = set()
 
 class MockDataGenerator:
     def __init__(self):
         self.time = 0
-        self.behaviors = ["normal", "aggressive_acceleration", "aggressive_braking", "aggressive_turning"]
-        self.behavior_weights = [0.7, 0.1, 0.1, 0.1]  # 70% normal, 30% aggressive behaviors
+        self.behaviors = ["normal_driving", "aggressive_acceleration", "aggressive_braking", "aggressive_turning"]
+        self.behavior_weights = [0.5, 0.2, 0.15, 0.15]  # Increased probability of aggressive behaviors
+        self.current_behavior = "normal_driving"
+        self.behavior_duration = 0
         
     def generate_sensor_data(self):
         # Simulate accelerometer data with some noise and periodic motion
@@ -33,15 +48,15 @@ class MockDataGenerator:
         accel_z = 9.81 + random.uniform(-0.1, 0.1)  # Approximately 1G with noise
         
         # Simulate gyroscope data with more realistic motion
-        gyro_x = math.sin(self.time * 2) * 45 + random.uniform(-5, 5)  # Roll
-        gyro_y = math.cos(self.time * 2) * 30 + random.uniform(-5, 5)  # Pitch
-        gyro_z = math.sin(self.time * 1.5) * 20 + random.uniform(-5, 5)  # Yaw
+        gyro_x = math.sin(self.time * 2) * 45 + random.uniform(-5, 5)
+        gyro_y = math.cos(self.time * 2) * 30 + random.uniform(-5, 5)
+        gyro_z = math.sin(self.time * 1.5) * 20 + random.uniform(-5, 5)
         
         self.time += 0.1  # Increment time
         
         return {
             'accelerometer': {'x': accel_x, 'y': accel_y, 'z': accel_z},
-            'gyroscope': {'roll': gyro_x, 'pitch': gyro_y, 'yaw': gyro_z}
+            'gyroscope': {'x': gyro_x, 'y': gyro_y, 'z': gyro_z}  # Use x,y,z instead of roll,pitch,yaw
         }
     
     def generate_obd_data(self):
@@ -64,10 +79,25 @@ class MockDataGenerator:
         }
     
     def generate_behavior(self):
-        # More realistic behavior transitions
-        if random.random() < 0.1:  # Only change behavior 10% of the time
-            return random.choices(self.behaviors, weights=self.behavior_weights)[0]
-        return "normal"  # Default to normal behavior
+        # More frequent behavior changes with patterns
+        self.behavior_duration += 1
+        
+        # Force behavior change every 20-30 updates
+        if self.behavior_duration >= random.randint(20, 30):
+            self.behavior_duration = 0
+            new_behavior = random.choices(self.behaviors, weights=self.behavior_weights)[0]
+            self.current_behavior = new_behavior
+        
+        # Add some randomness - 5% chance to change behavior on any frame
+        elif random.random() < 0.05:  
+            new_behavior = random.choices(self.behaviors, weights=self.behavior_weights)[0]
+            self.current_behavior = new_behavior
+        
+        return {
+            'event': self.current_behavior,
+            'confidence': round(random.uniform(0.7, 0.95), 2),
+            'timestamp': datetime.now().timestamp()
+        }
 
 # Initialize mock data generator
 mock_generator = MockDataGenerator()
@@ -90,10 +120,43 @@ async def health_check():
         "last_error": None
     })
 
+@app.route('/sessions/recent')
+async def get_recent_sessions():
+    """Mock sessions endpoint"""
+    return jsonify([
+        {
+            'id': 1, 
+            'start_time': (datetime.now().replace(hour=datetime.now().hour-1)).isoformat(),
+            'end_time': datetime.now().isoformat(),
+            'total_aggressive_events': 12,
+            'average_speed': 45.3,
+            'max_speed': 85.7
+        },
+        {
+            'id': 2,
+            'start_time': (datetime.now().replace(day=datetime.now().day-1)).isoformat(),
+            'end_time': (datetime.now().replace(day=datetime.now().day-1, hour=datetime.now().hour+1)).isoformat(),
+            'total_aggressive_events': 8,
+            'average_speed': 38.9,
+            'max_speed': 72.4
+        }
+    ])
+
+@app.route('/statistics/behavior')
+async def get_behavior_stats():
+    """Mock behavior statistics endpoint"""
+    return jsonify({
+        'normal': 75,
+        'aggressive_acceleration': 10,
+        'aggressive_braking': 8,
+        'aggressive_turning': 7
+    })
+
 async def broadcast_mock_data():
     """Broadcast mock sensor data to all connected clients"""
     message_count = 0
     error_simulation_time = 0
+    last_behavior_time = 0
     while True:
         if not connected_clients:
             await asyncio.sleep(0.1)
@@ -104,6 +167,12 @@ async def broadcast_mock_data():
             sensor_data = mock_generator.generate_sensor_data()
             obd_data = mock_generator.generate_obd_data()
             behavior = mock_generator.generate_behavior()
+            
+            # Log behavior changes
+            current_time = time.time()
+            if last_behavior_time == 0 or (current_time - last_behavior_time > 2 and behavior['event'] != 'normal_driving'):
+                logger.debug(f"Behavior changed to: {behavior['event']} with confidence {behavior['confidence']}")
+                last_behavior_time = current_time
 
             # Simulate occasional system issues for testing
             error_simulation_time += 0.1
@@ -127,20 +196,32 @@ async def broadcast_mock_data():
                 last_error = "OBD connection lost: timeout waiting for response"
                 status = "error"
 
-            # Combine all data
+            # Combine all data with the correct format for frontend
             data = {
                 'timestamp': datetime.now().isoformat(),
                 'sensor_data': sensor_data,
-                'obd_data': obd_data,
+                'obd_data': {
+                    'rpm': obd_data['RPM'],
+                    'speed': obd_data['SPEED'],
+                    'throttle': obd_data['THROTTLE_POS'],
+                    'engineLoad': obd_data['ENGINE_LOAD'],
+                    'coolant': obd_data['COOLANT_TEMP'],
+                    'battery': obd_data['CONTROL_MODULE_VOLTAGE'],
+                    'intake': obd_data['INTAKE_PRESSURE']
+                },
                 'behavior': behavior,
                 'system_health': {
                     'status': status,
                     'mpu_sensor_ok': mpu_sensor_ok,
                     'obd_connection_ok': obd_connection_ok,
-                    'error_count': error_counts,
+                    'error_counts': error_counts,
                     'last_error': last_error
                 }
             }
+
+            # Log sample data occasionally
+            if message_count % 100 == 0:
+                logger.debug(f"Sample data being sent: {json.dumps(data)[:200]}...")
 
             # Broadcast to all connected clients
             disconnected_clients = set()
@@ -149,7 +230,7 @@ async def broadcast_mock_data():
                     await client.send(json.dumps(data))
                     message_count += 1
                     if message_count % 100 == 0:  # Log every 100 messages
-                        logger.debug(f"Sent {message_count} messages to clients. Current data: {json.dumps(data)[:200]}...")
+                        logger.debug(f"Sent {message_count} messages to clients")
                 except Exception as e:
                     logger.error(f"Error sending to client: {str(e)}")
                     disconnected_clients.add(client)
@@ -194,5 +275,5 @@ async def shutdown():
     logger.info("Mock server shutdown completed")
 
 if __name__ == "__main__":
-    logger.info("Starting mock server on port 5000...")
-    app.run(host='0.0.0.0', port=5000) 
+    logger.info("Starting mock server on port 8000...")
+    app.run(host='0.0.0.0', port=8000)

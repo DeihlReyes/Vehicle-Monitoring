@@ -10,7 +10,7 @@ class BehaviorPredictor:
         self.data_buffer = deque(maxlen=sequence_length)
         self.lock = threading.Lock()
         self.latest_prediction = None
-        self.behaviors = ['Normal', 'Aggressive Acceleration', 'Aggressive Deceleration', 'Aggressive Lane Change']
+        self.behaviors = ['normal_driving', 'aggressive_acceleration', 'aggressive_braking', 'aggressive_turning']
         
         # Initialize model
         if model_path:

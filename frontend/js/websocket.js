@@ -254,51 +254,51 @@ class WebSocketHandler {
       aggressiveCountElement.textContent = totalAggressive;
     }
 
-    // Update recent events list
-    const recentEventsElement = document.getElementById("recent-events");
-    if (recentEventsElement) {
-      recentEventsElement.innerHTML = "";
+    // Update recent events list - Fix to use events-list ID instead of recent-events
+    const eventsListElement = document.getElementById("events-list");
+    if (eventsListElement) {
+      eventsListElement.innerHTML = "";
 
       if (this.behaviorStats.recent_events.length === 0) {
-        const noEventsItem = document.createElement("li");
-        noEventsItem.className = "list-group-item text-center text-muted";
+        const noEventsItem = document.createElement("div");
+        noEventsItem.className = "event-item text-center text-muted";
         noEventsItem.textContent = "No events recorded";
-        recentEventsElement.appendChild(noEventsItem);
+        eventsListElement.appendChild(noEventsItem);
       } else {
         this.behaviorStats.recent_events.forEach((event) => {
-          const listItem = document.createElement("li");
-          listItem.className = "list-group-item";
+          const eventItem = document.createElement("div");
+          eventItem.className = "event-item";
 
-          let eventClass = "text-primary";
+          let eventClass = "normal";
           let eventIcon = "🚗"; // Default icon
 
           switch (event.type) {
             case "aggressive_acceleration":
-              eventClass = "text-danger";
+              eventClass = "aggressive";
               eventIcon = "🚀";
               break;
             case "aggressive_braking":
-              eventClass = "text-warning";
+              eventClass = "aggressive";
               eventIcon = "🛑";
               break;
             case "aggressive_turning":
-              eventClass = "text-info";
+              eventClass = "aggressive";
               eventIcon = "↩️";
               break;
             case "normal_driving":
-              eventClass = "text-success";
+              eventClass = "normal";
               eventIcon = "✅";
               break;
           }
 
-          listItem.innerHTML = `
-            <span class="${eventClass}">
+          eventItem.innerHTML = `
+            <span class="event-badge ${eventClass}">
               ${eventIcon} ${this.formatBehaviorType(event.type)}
             </span>
-            <span class="float-end text-muted small">${event.timestamp}</span>
+            <span class="event-time">${event.timestamp}</span>
           `;
 
-          recentEventsElement.appendChild(listItem);
+          eventsListElement.appendChild(eventItem);
         });
       }
     }
@@ -314,32 +314,48 @@ class WebSocketHandler {
 
   updateOBDMetrics(obdData) {
     try {
-      if (obdData.speed !== undefined) {
-        const speedElement = document.getElementById("vehicle-speed");
-        if (speedElement) {
-          speedElement.textContent = `${Math.round(obdData.speed)} km/h`;
-        }
+      console.log("Updating OBD metrics with:", obdData);
+
+      // Update rpm-value
+      const rpmElement = document.getElementById("rpm-value");
+      if (rpmElement && obdData.rpm !== undefined) {
+        rpmElement.textContent = `${Math.round(obdData.rpm)}`;
       }
 
-      if (obdData.rpm !== undefined) {
-        const rpmElement = document.getElementById("engine-rpm");
-        if (rpmElement) {
-          rpmElement.textContent = `${Math.round(obdData.rpm)} RPM`;
-        }
+      // Update speed-value
+      const speedElement = document.getElementById("speed-value");
+      if (speedElement && obdData.speed !== undefined) {
+        speedElement.textContent = `${Math.round(obdData.speed)} km/h`;
       }
 
-      if (obdData.temperature !== undefined) {
-        const tempElement = document.getElementById("engine-temp");
-        if (tempElement) {
-          tempElement.textContent = `${Math.round(obdData.temperature)} °C`;
-        }
+      // Update throttle-value
+      const throttleElement = document.getElementById("throttle-value");
+      if (throttleElement && obdData.throttle !== undefined) {
+        throttleElement.textContent = `${Math.round(obdData.throttle)}%`;
       }
 
-      if (obdData.fuel_level !== undefined) {
-        const fuelElement = document.getElementById("fuel-level");
-        if (fuelElement) {
-          fuelElement.textContent = `${Math.round(obdData.fuel_level)}%`;
-        }
+      // Update coolant-temp
+      const coolantElement = document.getElementById("coolant-temp");
+      if (coolantElement && obdData.coolant !== undefined) {
+        coolantElement.textContent = `${Math.round(obdData.coolant)}°C`;
+      }
+
+      // Update intake-temp
+      const intakeElement = document.getElementById("intake-temp");
+      if (intakeElement && obdData.intake !== undefined) {
+        intakeElement.textContent = `${Math.round(obdData.intake)} kPa`;
+      }
+
+      // Update battery-voltage
+      const batteryElement = document.getElementById("battery-voltage");
+      if (batteryElement && obdData.battery !== undefined) {
+        batteryElement.textContent = `${obdData.battery.toFixed(1)}V`;
+      }
+
+      // Update engine-load
+      const engineLoadElement = document.getElementById("engine-load");
+      if (engineLoadElement && obdData.engineLoad !== undefined) {
+        engineLoadElement.textContent = `${Math.round(obdData.engineLoad)}%`;
       }
     } catch (error) {
       console.error("Error updating OBD metrics:", error);

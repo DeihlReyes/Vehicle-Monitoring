@@ -240,9 +240,9 @@ async def broadcast_sensor_data():
                             'z': raw_sensor_data['accelerometer']['z']
                         },
                         'gyroscope': {
-                            'roll': raw_sensor_data['gyroscope']['x'],  # Map x to roll
-                            'pitch': raw_sensor_data['gyroscope']['y'], # Map y to pitch
-                            'yaw': raw_sensor_data['gyroscope']['z']    # Map z to yaw
+                            'x': raw_sensor_data['gyroscope']['x'],  # Use x, y, z instead of roll, pitch, yaw
+                            'y': raw_sensor_data['gyroscope']['y'], 
+                            'z': raw_sensor_data['gyroscope']['z']
                         }
                     }
                     if current_session_id:
@@ -255,53 +255,78 @@ async def broadcast_sensor_data():
                     await handle_hardware_error("MPU6050", e)
                     sensor_data = {
                         'accelerometer': {'x': 0, 'y': 0, 'z': 0},
-                        'gyroscope': {'roll': 0, 'pitch': 0, 'yaw': 0}
+                        'gyroscope': {'x': 0, 'y': 0, 'z': 0}
                     }
             else:
                 sensor_data = {
                     'accelerometer': {'x': 0, 'y': 0, 'z': 0},
-                    'gyroscope': {'roll': 0, 'pitch': 0, 'yaw': 0}
+                    'gyroscope': {'x': 0, 'y': 0, 'z': 0}
                 }
 
             # Get OBD data with error handling
+            raw_obd_data = {}
             if obd_connection and obd_connection.is_connected():
                 try:
                     for command in watched_commands:
                         response = obd_connection.query(command)
                         if response.value is not None:
-                            obd_data[command.name] = response.value.magnitude
+                            raw_obd_data[command.name] = response.value.magnitude
                         else:
-                            obd_data[command.name] = None
+                            raw_obd_data[command.name] = None
                     
                     if current_session_id:
-                        db_manager.store_obd_data(current_session_id, obd_data)
+                        db_manager.store_obd_data(current_session_id, raw_obd_data)
                 except Exception as e:
                     await handle_hardware_error("OBD", e)
-                    obd_data = {cmd.name: None for cmd in watched_commands}
+                    raw_obd_data = {cmd.name: None for cmd in watched_commands}
             else:
-                obd_data = {cmd.name: None for cmd in watched_commands}
+                raw_obd_data = {cmd.name: None for cmd in watched_commands}
+            
+            # Format OBD data for frontend
+            obd_data = {
+                'rpm': raw_obd_data.get('RPM'),
+                'speed': raw_obd_data.get('SPEED'),
+                'throttle': raw_obd_data.get('THROTTLE_POS'),
+                'engineLoad': raw_obd_data.get('ENGINE_LOAD'),
+                'coolant': raw_obd_data.get('COOLANT_TEMP'),
+                'battery': raw_obd_data.get('CONTROL_MODULE_VOLTAGE'),
+                'intake': raw_obd_data.get('INTAKE_PRESSURE')
+            }
 
             # Get behavior prediction with error handling
             try:
                 behavior_data = behavior_predictor.get_latest_prediction()
-                if current_session_id and behavior_data.startswith('aggressive'):
+                # Format behavior data for frontend
+                behavior = {
+                    'event': behavior_data.get('behavior', 'normal_driving'),
+                    'confidence': behavior_data.get('confidence', 0.95),
+                    'timestamp': behavior_data.get('timestamp', datetime.now().timestamp())
+                }
+                
+                if current_session_id and behavior['event'].startswith('aggressive'):
                     # Store aggressive behavior events
-                    db_manager.store_behavior_event(current_session_id, behavior_data)
+                    db_manager.store_behavior_event(current_session_id, behavior['event'])
             except Exception as e:
                 logger.error(f"Behavior prediction error: {str(e)}")
                 await update_system_health("data", str(e))
-                behavior_data = "normal"
+                behavior = {
+                    'event': 'normal_driving',
+                    'confidence': 0.95,
+                    'timestamp': datetime.now().timestamp()
+                }
 
             # Combine all data
             data = {
                 'timestamp': datetime.now().isoformat(),
                 'sensor_data': sensor_data,
                 'obd_data': obd_data,
-                'behavior': behavior_data,
+                'behavior': behavior,
                 'system_health': {
                     'status': system_health.status.value,
                     'mpu_sensor_ok': system_health.mpu_sensor_ok,
-                    'obd_connection_ok': system_health.obd_connection_ok
+                    'obd_connection_ok': system_health.obd_connection_ok,
+                    'error_counts': system_health.error_count,
+                    'last_error': system_health.last_error
                 }
             }
 
@@ -367,4 +392,4 @@ async def shutdown():
         logger.error(f"Error during shutdown: {str(e)}")
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=8000)

@@ -264,13 +264,18 @@ class App {
       }
     };
 
-    updateElement("rpm-value", data.RPM);
-    updateElement("speed-value", data.SPEED, " km/h");
-    updateElement("throttle-value", data.THROTTLE_POS, "%");
-    updateElement("coolant-temp", data.COOLANT_TEMP, "°C");
-    updateElement("intake-temp", data.INTAKE_PRESSURE, " kPa");
-    updateElement("battery-voltage", data.CONTROL_MODULE_VOLTAGE, "V");
-    updateElement("engine-load", data.ENGINE_LOAD, "%");
+    // Handle either direct properties (from websocket) or nested ones (from API)
+    updateElement("rpm-value", data.rpm || data.RPM);
+    updateElement("speed-value", data.speed || data.SPEED, " km/h");
+    updateElement("throttle-value", data.throttle || data.THROTTLE_POS, "%");
+    updateElement("coolant-temp", data.coolant || data.COOLANT_TEMP, "°C");
+    updateElement("intake-temp", data.intake || data.INTAKE_PRESSURE, " kPa");
+    updateElement(
+      "battery-voltage",
+      data.battery || data.CONTROL_MODULE_VOLTAGE,
+      "V"
+    );
+    updateElement("engine-load", data.engineLoad || data.ENGINE_LOAD, "%");
   }
 
   updateSystemStatus(health) {
