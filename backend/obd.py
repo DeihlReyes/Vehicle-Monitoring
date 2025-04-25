@@ -1,11 +1,83 @@
 # obd.py
 import asyncio
 import obd
+import logging
 
-# Define the async OBD function to get data
+logger = logging.getLogger(__name__)
+
+class OBDInterface:
+    def __init__(self):
+        self.connection = None
+        self.commands = [
+            obd.commands.SPEED,
+            obd.commands.RPM,
+            obd.commands.THROTTLE_POS,
+            obd.commands.ENGINE_LOAD,
+            obd.commands.COOLANT_TEMP,
+            obd.commands.CONTROL_MODULE_VOLTAGE,
+            obd.commands.FUEL_STATUS,
+            obd.commands.O2_SENSORS,
+            obd.commands.INTAKE_PRESSURE,
+            obd.commands.TIMING_ADVANCE
+        ]
+        
+    def connect(self):
+        """Establish connection to OBD-II adapter"""
+        try:
+            self.connection = obd.Async()
+            
+            # Watch each command individually
+            self.connection.watch(obd.commands.SPEED)
+            self.connection.watch(obd.commands.RPM)
+            self.connection.watch(obd.commands.THROTTLE_POS)
+            self.connection.watch(obd.commands.ENGINE_LOAD)
+            self.connection.watch(obd.commands.COOLANT_TEMP)
+            self.connection.watch(obd.commands.CONTROL_MODULE_VOLTAGE)
+            self.connection.watch(obd.commands.FUEL_STATUS)
+            self.connection.watch(obd.commands.O2_SENSORS)
+            self.connection.watch(obd.commands.INTAKE_PRESSURE)
+            self.connection.watch(obd.commands.TIMING_ADVANCE)
+            
+            # Start the connection
+            self.connection.start()
+            logger.info("OBD connection established successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize OBD connection: {str(e)}")
+            return False
+            
+    def disconnect(self):
+        """Disconnect from OBD-II adapter"""
+        if self.connection:
+            self.connection.stop()
+            self.connection = None
+            
+    def is_connected(self):
+        """Check if the connection is active"""
+        return self.connection is not None and self.connection.is_connected()
+            
+    def get_data(self):
+        """Get the latest data from all watched commands"""
+        if not self.is_connected():
+            return {cmd.name: None for cmd in self.commands}
+            
+        try:
+            data = {}
+            for cmd in self.commands:
+                response = self.connection.query(cmd)
+                if response.value is not None:
+                    data[cmd.name] = response.value.magnitude
+                else:
+                    data[cmd.name] = None
+            return data
+        except Exception as e:
+            logger.error(f"Error retrieving OBD data: {str(e)}")
+            return {cmd.name: None for cmd in self.commands}
+
+# Backward compatibility with the original async function
 async def get_obd_data():
-    # Setup OBD connection (use your specific interface)
-    connection = obd.OBD()  # Assuming you're using an OBD library that supports async or can be wrapped
+    """Legacy function for backward compatibility"""
+    connection = obd.OBD()
     commands = [
         obd.commands.SPEED,
         obd.commands.RPM,
@@ -16,16 +88,13 @@ async def get_obd_data():
         obd.commands.FUEL_STATUS
     ]
     
-    # Use asyncio to fetch data concurrently for better performance
     async def fetch_data(command):
         response = connection.query(command)
-        return response.value if response.is_null() is False else None
+        return response.value if not response.is_null() else None
     
-    # Fetch all data concurrently
     tasks = [fetch_data(command) for command in commands]
     results = await asyncio.gather(*tasks)
     
-    # Map results to corresponding OBD commands
     obd_data = {
         "speed": results[0],
         "rpm": results[1],

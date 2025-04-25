@@ -11,6 +11,7 @@ import sys
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
+from obd import OBDInterface  # Import the new OBDInterface class
 
 # Error handling classes
 class SensorError(Exception):
@@ -77,30 +78,17 @@ except Exception as e:
     logger.error(f"Failed to initialize MPU6050: {str(e)}")
     mpu_sensor = None
 
+# Initialize OBD interface with the new implementation
 try:
-    obd_connection = obd.Async()
-    # Watch specific OBD commands
-    watched_commands = [
-        obd.commands.SPEED,
-        obd.commands.RPM,
-        obd.commands.THROTTLE_POS,
-        obd.commands.ENGINE_LOAD,
-        obd.commands.COOLANT_TEMP,
-        obd.commands.CONTROL_MODULE_VOLTAGE,
-        obd.commands.FUEL_STATUS,
-        obd.commands.O2_SENSORS,
-        obd.commands.INTAKE_PRESSURE,
-        obd.commands.TIMING_ADVANCE
-    ]
-    
-    for command in watched_commands:
-        obd_connection.watch(command)
-    
-    obd_connection.start()
-    logger.info("OBD connection established successfully")
+    obd_interface = OBDInterface()
+    if obd_interface.connect():
+        logger.info("OBD connection established successfully")
+    else:
+        logger.error("Failed to establish OBD connection")
+        obd_interface = None
 except Exception as e:
     logger.error(f"Failed to initialize OBD connection: {str(e)}")
-    obd_connection = None
+    obd_interface = None
 
 # Initialize behavior predictor
 behavior_predictor = BehaviorPredictor()
@@ -118,7 +106,7 @@ async def update_system_health(error_type: str = None, error_message: str = None
     
     # Check component status
     system_health.mpu_sensor_ok = mpu_sensor is not None and getattr(mpu_sensor, 'is_initialized', False)
-    system_health.obd_connection_ok = obd_connection is not None and obd_connection.is_connected()
+    system_health.obd_connection_ok = obd_interface is not None and obd_interface.is_connected()
     
     # Determine overall system status
     if system_health.error_count["hardware"] > 10 or system_health.error_count["data"] > 20:
@@ -132,7 +120,7 @@ async def update_system_health(error_type: str = None, error_message: str = None
 
 async def handle_hardware_error(component: str, error: Exception):
     """Handle hardware-related errors with retry logic"""
-    global mpu_sensor, obd_connection
+    global mpu_sensor, obd_interface
     
     logger.error(f"{component} error: {str(error)}")
     await update_system_health("hardware", str(error))
@@ -146,16 +134,15 @@ async def handle_hardware_error(component: str, error: Exception):
                 logger.error(f"Failed to reset MPU6050: {str(e)}")
         mpu_sensor = None
     
-    elif component == "OBD" and obd_connection:
+    elif component == "OBD" and obd_interface:
         for _ in range(HARDWARE_RETRY_ATTEMPTS):
             try:
-                obd_connection.close()
-                obd_connection = obd.Async()
-                obd_connection.start()
-                return True
+                obd_interface.disconnect()
+                if obd_interface.connect():
+                    return True
             except Exception as e:
                 logger.error(f"Failed to reconnect OBD: {str(e)}")
-        obd_connection = None
+        obd_interface = None
     
     return False
 
@@ -265,22 +252,17 @@ async def broadcast_sensor_data():
 
             # Get OBD data with error handling
             raw_obd_data = {}
-            if obd_connection and obd_connection.is_connected():
+            if obd_interface and obd_interface.is_connected():
                 try:
-                    for command in watched_commands:
-                        response = obd_connection.query(command)
-                        if response.value is not None:
-                            raw_obd_data[command.name] = response.value.magnitude
-                        else:
-                            raw_obd_data[command.name] = None
+                    raw_obd_data = obd_interface.get_data()
                     
                     if current_session_id:
                         db_manager.store_obd_data(current_session_id, raw_obd_data)
                 except Exception as e:
                     await handle_hardware_error("OBD", e)
-                    raw_obd_data = {cmd.name: None for cmd in watched_commands}
+                    raw_obd_data = {cmd.name: None for cmd in obd_interface.commands}
             else:
-                raw_obd_data = {cmd.name: None for cmd in watched_commands}
+                raw_obd_data = {}
             
             # Format OBD data for frontend
             obd_data = {
@@ -381,8 +363,8 @@ async def shutdown():
     try:
         if hasattr(app, 'broadcast_task'):
             app.broadcast_task.cancel()
-        if obd_connection:
-            obd_connection.stop()
+        if obd_interface:
+            obd_interface.disconnect()
         if behavior_predictor:
             behavior_predictor.stop()
         if current_session_id:
