@@ -179,8 +179,9 @@ body {
 
 .nav-btn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  gap: 0.5rem;
   justify-content: center;
   border: none;
   background: none;
@@ -193,7 +194,7 @@ body {
 
 .nav-btn.active {
   color: #1976d2;
-  background: #f0f7ff;
+  background: #d0e3f9;
   border-radius: 8px;
 }
 
