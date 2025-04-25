@@ -126,23 +126,68 @@ async def handle_hardware_error(component: str, error: Exception):
     await update_system_health("hardware", str(error))
     
     if component == "MPU6050" and mpu_sensor:
-        for _ in range(HARDWARE_RETRY_ATTEMPTS):
+        for attempt in range(HARDWARE_RETRY_ATTEMPTS):
             try:
+                logger.info(f"MPU6050 reset attempt {attempt+1}/{HARDWARE_RETRY_ATTEMPTS}")
                 mpu_sensor.reset()
+                # Verify the sensor is working by attempting to get data
+                test_data = mpu_sensor.get_data()
+                logger.info(f"MPU6050 reset successful, verified with data: {test_data['accelerometer']['x']:.2f}, {test_data['accelerometer']['y']:.2f}, {test_data['accelerometer']['z']:.2f}")
                 return True
             except Exception as e:
-                logger.error(f"Failed to reset MPU6050: {str(e)}")
-        mpu_sensor = None
+                logger.error(f"Reset attempt {attempt+1} failed: {str(e)}")
+                await asyncio.sleep(1)  # Add delay between attempts
+                
+        # All retry attempts failed, try to completely reinitialize the sensor
+        logger.warning("All reset attempts failed, reinitializing MPU6050...")
+        try:
+            mpu_sensor = None
+            await asyncio.sleep(1)  # Brief delay before reinitializing
+            mpu_sensor = MPU6050()
+            test_data = mpu_sensor.get_data()  # Verify it's working
+            logger.info(f"MPU6050 reinitialization successful")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to reinitialize MPU6050: {str(e)}")
+            mpu_sensor = None
     
     elif component == "OBD" and obd_interface:
-        for _ in range(HARDWARE_RETRY_ATTEMPTS):
+        for attempt in range(HARDWARE_RETRY_ATTEMPTS):
             try:
+                logger.info(f"OBD reconnection attempt {attempt+1}/{HARDWARE_RETRY_ATTEMPTS}")
                 obd_interface.disconnect()
+                await asyncio.sleep(1)  # Add delay before reconnection
+                
                 if obd_interface.connect():
-                    return True
+                    # Verify connection by trying to get data
+                    test_data = obd_interface.get_data()
+                    if any(value is not None for value in test_data.values()):
+                        logger.info(f"OBD reconnection successful, verified with data")
+                        return True
+                    else:
+                        logger.warning("OBD reconnected but no data available")
+                else:
+                    logger.warning("OBD connection attempt failed")
             except Exception as e:
-                logger.error(f"Failed to reconnect OBD: {str(e)}")
-        obd_interface = None
+                logger.error(f"OBD reconnection attempt {attempt+1} failed: {str(e)}")
+                await asyncio.sleep(2)  # Longer delay between attempts
+        
+        # All retry attempts failed, try to completely reinitialize
+        logger.warning("All OBD reconnection attempts failed, reinitializing OBD interface...")
+        try:
+            obd_interface = None
+            await asyncio.sleep(2)  # Brief delay before reinitializing
+            obd_interface = OBDInterface()
+            if obd_interface.connect():
+                # Verify with data retrieval
+                test_data = obd_interface.get_data()
+                logger.info(f"OBD reinitialization successful")
+                return True
+            else:
+                logger.error("OBD reinitialization failed")
+        except Exception as e:
+            logger.error(f"Failed to reinitialize OBD: {str(e)}")
+            obd_interface = None
     
     return False
 
@@ -197,7 +242,7 @@ async def get_behavior_stats():
         return jsonify({'error': str(e)}), 500
 
 async def broadcast_sensor_data():
-    global current_session_id
+    global current_session_id, mpu_sensor, obd_interface
     
     # Start a new session
     try:
@@ -216,8 +261,8 @@ async def broadcast_sensor_data():
             sensor_data = None
             obd_data = {}
             
-            # Get MPU6050 data with error handling
-            if mpu_sensor:
+            # Get MPU6050 data with improved error handling
+            if mpu_sensor and mpu_sensor.is_initialized:
                 try:
                     raw_sensor_data = mpu_sensor.get_data()
                     sensor_data = {
@@ -227,7 +272,7 @@ async def broadcast_sensor_data():
                             'z': raw_sensor_data['accelerometer']['z']
                         },
                         'gyroscope': {
-                            'x': raw_sensor_data['gyroscope']['x'],  # Use x, y, z instead of roll, pitch, yaw
+                            'x': raw_sensor_data['gyroscope']['x'],
                             'y': raw_sensor_data['gyroscope']['y'], 
                             'z': raw_sensor_data['gyroscope']['z']
                         }
@@ -239,18 +284,32 @@ async def broadcast_sensor_data():
                             sensor_data['gyroscope']
                         )
                 except Exception as e:
-                    await handle_hardware_error("MPU6050", e)
+                    logger.error(f"Error getting MPU6050 data: {str(e)}")
+                    success = await handle_hardware_error("MPU6050", e)
+                    if not success:
+                        # If recovery failed, update system health and use default values
+                        await update_system_health("hardware", f"MPU6050 recovery failed: {str(e)}")
+                    
+                    # Use default values regardless of recovery success to keep the app running
                     sensor_data = {
                         'accelerometer': {'x': 0, 'y': 0, 'z': 0},
                         'gyroscope': {'x': 0, 'y': 0, 'z': 0}
                     }
             else:
+                # No MPU sensor available or not initialized
+                if mpu_sensor and not mpu_sensor.is_initialized:
+                    logger.warning("MPU6050 is not initialized, attempting to initialize...")
+                    try:
+                        mpu_sensor.connect(mpu_sensor.bus_number)
+                    except Exception as e:
+                        logger.error(f"Failed to initialize MPU6050: {str(e)}")
+                
                 sensor_data = {
                     'accelerometer': {'x': 0, 'y': 0, 'z': 0},
                     'gyroscope': {'x': 0, 'y': 0, 'z': 0}
                 }
-
-            # Get OBD data with error handling
+            
+            # Get OBD data with improved error handling
             raw_obd_data = {}
             if obd_interface and obd_interface.is_connected():
                 try:
@@ -259,9 +318,23 @@ async def broadcast_sensor_data():
                     if current_session_id:
                         db_manager.store_obd_data(current_session_id, raw_obd_data)
                 except Exception as e:
-                    await handle_hardware_error("OBD", e)
-                    raw_obd_data = {cmd.name: None for cmd in obd_interface.commands}
+                    logger.error(f"Error getting OBD data: {str(e)}")
+                    success = await handle_hardware_error("OBD", e)
+                    if not success:
+                        # If recovery failed, update system health
+                        await update_system_health("hardware", f"OBD recovery failed: {str(e)}")
+                    
+                    # Use empty dictionary regardless of recovery success to keep the app running
+                    raw_obd_data = {}
             else:
+                # No OBD interface available or not connected
+                if obd_interface and not obd_interface.is_connected():
+                    logger.warning("OBD interface is not connected, attempting to connect...")
+                    try:
+                        obd_interface.connect()
+                    except Exception as e:
+                        logger.error(f"Failed to connect to OBD: {str(e)}")
+                
                 raw_obd_data = {}
             
             # Format OBD data for frontend

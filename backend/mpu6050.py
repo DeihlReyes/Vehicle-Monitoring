@@ -149,6 +149,7 @@ class MPU6050Hardware(MPU6050Base):
         self.bus = None
         self.device_address = device_address
         self.retry_attempts = retry_attempts
+        self.bus_number = bus
         self.connect(bus)
 
     def connect(self, bus: int) -> None:
@@ -156,6 +157,12 @@ class MPU6050Hardware(MPU6050Base):
         from smbus2 import SMBus
         for attempt in range(self.retry_attempts):
             try:
+                if self.bus:
+                    try:
+                        self.bus.close()
+                    except Exception:
+                        pass
+                
                 self.bus = SMBus(bus)
                 self.setup()
                 self.is_initialized = True
@@ -166,6 +173,7 @@ class MPU6050Hardware(MPU6050Base):
                 if attempt < self.retry_attempts - 1:
                     time.sleep(1)  # Wait before retrying
                 else:
+                    self.is_initialized = False
                     raise MPU6050Error(f"Failed to initialize MPU6050 after {self.retry_attempts} attempts") from e
 
     def setup(self) -> None:
@@ -176,8 +184,31 @@ class MPU6050Hardware(MPU6050Base):
             time.sleep(0.1)  # Wait for device to stabilize
             
             # Verify setup by reading back configuration
-            if self.bus.read_byte_data(self.device_address, self.POWER_MGMT_1) != 0:
-                raise MPU6050Error("Failed to configure power management")
+            power_val = self.bus.read_byte_data(self.device_address, self.POWER_MGMT_1)
+            if power_val != 0:
+                logger.warning(f"Power management register returned {power_val} instead of 0")
+                # Try to set it again
+                self.bus.write_byte_data(self.device_address, self.POWER_MGMT_1, 0)
+                time.sleep(0.2)  # Wait longer
+                
+                # Check again
+                if self.bus.read_byte_data(self.device_address, self.POWER_MGMT_1) != 0:
+                    raise MPU6050Error("Failed to configure power management")
+            
+            # Set sample rate to 50Hz (or other appropriate rate)
+            self.bus.write_byte_data(self.device_address, self.SMPLRT_DIV, 0x09)
+            
+            # Configure filters
+            self.bus.write_byte_data(self.device_address, self.CONFIG, 0x06)
+            
+            # Configure gyroscope range to ±250°/s
+            self.bus.write_byte_data(self.device_address, self.GYRO_CONFIG, 0x00)
+            
+            # Configure accelerometer range to ±2g
+            self.bus.write_byte_data(self.device_address, self.ACCEL_CONFIG, 0x00)
+            
+            logger.info("MPU6050 successfully configured")
+            
         except Exception as e:
             raise MPU6050Error(f"Setup failed: {str(e)}") from e
 
@@ -236,15 +267,51 @@ class MPU6050Hardware(MPU6050Base):
             raise MPU6050Error("Failed to get sensor data") from e
 
     def reset(self) -> None:
-        """Reset the device if it becomes unresponsive"""
+        """Reset the device if it becomes unresponsive with improved error handling"""
+        logger.info("Attempting to reset MPU6050...")
+        
+        # First try a soft reset
         try:
-            self.bus.write_byte_data(self.device_address, self.POWER_MGMT_1, 0x80)  # Reset all registers
-            time.sleep(0.1)
-            self.setup()
-            logger.info("MPU6050 reset successful")
+            # Soft reset - write 0x80 to power management register
+            self.bus.write_byte_data(self.device_address, self.POWER_MGMT_1, 0x80)
+            time.sleep(0.1)  # Wait for device to stabilize
+            
+            # Check if the device is responsive
+            try:
+                self.bus.read_byte_data(self.device_address, self.POWER_MGMT_1)
+                # If we get here, the device is responding after soft reset
+                self.setup()
+                logger.info("MPU6050 soft reset successful")
+                return
+            except Exception:
+                logger.warning("Soft reset did not restore device functionality")
         except Exception as e:
-            logger.error(f"Failed to reset MPU6050: {str(e)}")
-            raise MPU6050Error("Reset failed") from e
+            logger.warning(f"Soft reset failed: {str(e)}")
+        
+        # If soft reset fails, try a full reconnection
+        try:
+            logger.info("Attempting full reconnection...")
+            if self.bus:
+                try:
+                    self.bus.close()
+                except Exception:
+                    pass
+                self.bus = None
+            
+            # Wait a bit longer before trying to reconnect
+            time.sleep(0.5)
+            
+            # Reconnect to the I2C bus and reinitialize the device
+            self.connect(self.bus_number)
+            
+            # Verify device is working by reading from a register
+            self.bus.read_byte_data(self.device_address, self.POWER_MGMT_1)
+            logger.info("MPU6050 full reconnection successful")
+            return
+        except Exception as e:
+            logger.error(f"Full reconnection failed: {str(e)}")
+            self.is_initialized = False
+            raise MPU6050Error(f"Failed to reset MPU6050: {str(e)}") from e
 
 def MPU6050(bus=1, device_address=0x68, retry_attempts=3):
     """Factory function to create the appropriate MPU6050 instance based on the platform"""
