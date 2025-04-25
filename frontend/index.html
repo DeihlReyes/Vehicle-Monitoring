@@ -9,8 +9,8 @@
     <title>Riding Behavior Monitor</title>
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="stylesheet" href="css/charts.css" />
+    <!-- Load Plotly first -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
   </head>
   <body>
     <div class="app-container">
@@ -107,6 +107,45 @@
         </div>
       </div>
 
+      <!-- System Info Tab -->
+      <div class="tab-content hidden" id="system-tab">
+        <div class="system-info-container">
+          <h2>System Status</h2>
+          <div id="system-info-status" class="system-status-grid">
+            <!-- Status will be populated by WebSocket handler -->
+          </div>
+          <div class="system-actions">
+            <button id="clear-errors" onclick="window.wsHandler.clearErrors()">
+              <span class="action-icon">🗑️</span>
+              <span>Clear Error Counts</span>
+            </button>
+            <button
+              id="reconnect"
+              onclick="window.wsHandler.reconnectWebSocket()"
+            >
+              <span class="action-icon">🔄</span>
+              <span>Reconnect WebSocket</span>
+            </button>
+          </div>
+
+          <!-- System Logs -->
+          <div class="system-logs">
+            <h3>System Logs</h3>
+            <div class="log-controls">
+              <button onclick="clearLogs()">Clear Logs</button>
+              <select id="log-filter" onchange="filterLogs()">
+                <option value="all">All Messages</option>
+                <option value="error">Errors Only</option>
+                <option value="websocket">WebSocket</option>
+                <option value="charts">Charts</option>
+                <option value="data">Data</option>
+              </select>
+            </div>
+            <div id="debug-console" class="log-container"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Bottom Navigation -->
       <nav class="bottom-nav">
         <button class="nav-btn active" data-tab="dashboard">
@@ -121,10 +160,444 @@
           <span class="nav-icon">🔧</span>
           <span>OBD Info</span>
         </button>
+        <button class="nav-btn" data-tab="system">
+          <span class="nav-icon">⚙️</span>
+          <span>System</span>
+        </button>
       </nav>
     </div>
-    <script src="js/app.js"></script>
+
+    <!-- Load scripts in correct order -->
     <script src="js/charts.js"></script>
     <script src="js/websocket.js"></script>
+    <script src="js/app.js"></script>
+
+    <!-- Remove the floating debug console and put script for handling logs -->
+    <script>
+      // Debug console setup
+      const debugConsole = document.getElementById("debug-console");
+
+      function debugLog(message) {
+        const time = new Date().toISOString().substr(11, 8);
+
+        // Determine message type for styling
+        let logClass = "log-info";
+        if (message.toLowerCase().includes("error")) {
+          logClass = "log-error";
+        } else if (message.toLowerCase().includes("websocket")) {
+          logClass = "log-websocket";
+        } else if (message.toLowerCase().includes("chart")) {
+          logClass = "log-chart";
+        } else if (message.toLowerCase().includes("data")) {
+          logClass = "log-data";
+        }
+
+        const line = document.createElement("div");
+        line.className = `log-line ${logClass}`;
+
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "log-time";
+        timeSpan.textContent = time;
+
+        const msgSpan = document.createElement("span");
+        msgSpan.className = "log-message";
+        msgSpan.textContent = message;
+
+        line.appendChild(timeSpan);
+        line.appendChild(msgSpan);
+
+        debugConsole.appendChild(line);
+        if (debugConsole.children.length > 100) {
+          debugConsole.removeChild(debugConsole.firstChild);
+        }
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+      }
+
+      // Override console.log and error
+      const originalLog = console.log;
+      const originalError = console.error;
+
+      console.log = function () {
+        debugLog(Array.from(arguments).join(" "));
+        originalLog.apply(console, arguments);
+      };
+
+      console.error = function () {
+        debugLog("ERROR: " + Array.from(arguments).join(" "));
+        originalError.apply(console, arguments);
+      };
+
+      // Filtering functions
+      function filterLogs() {
+        const filter = document.getElementById("log-filter").value;
+        const logLines = document.querySelectorAll(".log-line");
+
+        logLines.forEach((line) => {
+          if (filter === "all") {
+            line.style.display = "flex";
+          } else if (
+            filter === "error" &&
+            line.classList.contains("log-error")
+          ) {
+            line.style.display = "flex";
+          } else if (
+            filter === "websocket" &&
+            line.classList.contains("log-websocket")
+          ) {
+            line.style.display = "flex";
+          } else if (
+            filter === "charts" &&
+            line.classList.contains("log-chart")
+          ) {
+            line.style.display = "flex";
+          } else if (filter === "data" && line.classList.contains("log-data")) {
+            line.style.display = "flex";
+          } else {
+            line.style.display = "none";
+          }
+        });
+      }
+
+      function clearLogs() {
+        debugConsole.innerHTML = "";
+        debugLog("Logs cleared");
+      }
+
+      // Wait for all scripts to load before initializing
+      window.addEventListener("load", function () {
+        console.log("All resources finished loading!");
+        if (window.charts && window.charts.initializeCharts) {
+          window.charts.initializeCharts();
+        } else {
+          console.error("Charts initialization not available");
+        }
+      });
+    </script>
+
+    <style>
+      /* Global fixes for mobile */
+      body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        width: 100%;
+        min-height: 100vh;
+      }
+
+      .app-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100%;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      .tab-content {
+        flex: 1;
+        overflow-y: auto;
+        position: relative;
+        padding-bottom: 65px; /* Space for bottom nav */
+      }
+
+      .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+      }
+
+      /* System Info Styles */
+      .system-info-container {
+        padding: 10px;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .system-info-container h2 {
+        margin: 10px 0;
+        font-size: 1.5rem;
+        text-align: center;
+      }
+
+      .system-status-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 0;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .status-section {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .status-section h3 {
+        background: #f8f9fa;
+        margin: 0;
+        padding: 10px 15px;
+        border-bottom: 1px solid #dee2e6;
+        font-size: 16px;
+        color: #495057;
+      }
+
+      .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .status-item:last-child {
+        border-bottom: none;
+      }
+
+      .status-label {
+        font-weight: bold;
+        color: #495057;
+        flex: 1;
+        padding-right: 5px;
+      }
+
+      .status-value {
+        font-family: monospace;
+        text-align: right;
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      .status-value.ok {
+        color: #28a745;
+        font-weight: bold;
+      }
+
+      .status-value.warning {
+        color: #ffc107;
+        font-weight: bold;
+      }
+
+      .status-value.error {
+        color: #dc3545;
+        font-weight: bold;
+      }
+
+      .status-item.ok {
+        border-left: 4px solid #28a745;
+      }
+
+      .status-item.warning {
+        border-left: 4px solid #ffc107;
+      }
+
+      .status-item.error {
+        border-left: 4px solid #dc3545;
+      }
+
+      .error-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        padding: 10px;
+        gap: 10px;
+      }
+
+      @media (min-width: 768px) {
+        .system-info-container {
+          padding: 15px;
+          max-width: 800px;
+        }
+
+        .error-stats {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+
+      .error-stat {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 10px;
+        text-align: center;
+      }
+
+      .error-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-bottom: 5px;
+      }
+
+      .error-count {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #495057;
+      }
+
+      .last-error {
+        padding: 15px;
+        background: #fff;
+      }
+
+      .error-message {
+        font-family: monospace;
+        color: #dc3545;
+        margin-bottom: 5px;
+        word-break: break-word;
+      }
+
+      .error-time {
+        font-size: 0.8rem;
+        color: #6c757d;
+        text-align: right;
+      }
+
+      .system-actions {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .system-actions button {
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        min-width: 150px;
+        max-width: 200px;
+      }
+
+      .action-icon {
+        margin-right: 8px;
+      }
+
+      .system-actions button:first-child {
+        background: #dc3545;
+        color: white;
+      }
+
+      .system-actions button:first-child:hover {
+        background: #c82333;
+      }
+
+      .system-actions button:last-child {
+        background: #007bff;
+        color: white;
+      }
+
+      .system-actions button:last-child:hover {
+        background: #0056b3;
+      }
+
+      /* System Logs Styles */
+      .system-logs {
+        margin-top: 15px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .system-logs h3 {
+        background: #f8f9fa;
+        margin: 0;
+        padding: 12px 15px;
+        border-bottom: 1px solid #dee2e6;
+      }
+
+      .log-controls {
+        padding: 8px 15px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .log-controls button {
+        padding: 5px 10px;
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .log-controls select {
+        padding: 5px 10px;
+        border-radius: 4px;
+        border: 1px solid #ced4da;
+        flex-grow: 1;
+        max-width: 200px;
+      }
+
+      .log-container {
+        max-height: 250px;
+        overflow-y: auto;
+        background: #f8f9fa;
+        font-family: monospace;
+        padding: 0;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .log-line {
+        display: flex;
+        border-bottom: 1px solid #eee;
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .log-time {
+        flex: 0 0 70px;
+        color: #6c757d;
+        padding-right: 5px;
+      }
+
+      .log-message {
+        flex: 1;
+        min-width: 150px;
+        word-break: break-word;
+      }
+
+      .log-error {
+        background: #ffebee;
+        color: #d32f2f;
+      }
+
+      .log-websocket {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+
+      .log-chart {
+        background: #e3f2fd;
+        color: #1565c0;
+      }
+
+      .log-data {
+        background: #fff3e0;
+        color: #e65100;
+      }
+    </style>
   </body>
 </html>

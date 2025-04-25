@@ -1,304 +1,448 @@
+// Chart configurations for Vehicle Monitoring System
+console.log("Loading charts.js...");
+
 // Chart configuration
 const chartConfig = {
   responsive: true,
   displayModeBar: false,
-  staticPlot: false,
+  modeBarButtonsToRemove: [
+    "zoomIn2d",
+    "zoomOut2d",
+    "autoScale2d",
+    "resetScale2d",
+    "hoverClosestCartesian",
+    "toggleSpikelines",
+  ],
+  displaylogo: false,
   scrollZoom: false,
-  showTips: false,
 };
 
 // Common layout settings
 const commonLayout = {
-  paper_bgcolor: "rgba(0,0,0,0)",
-  plot_bgcolor: "#f8f9fa",
-  margin: { t: 10, r: 10, b: 40, l: 50 },
-  font: {
-    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    size: 11,
-    color: "#666",
-  },
-  showlegend: true,
-  legend: {
-    orientation: "h",
-    yanchor: "bottom",
-    y: -0.2,
-    xanchor: "center",
-    x: 0.5,
-    font: {
-      size: 10,
-    },
-  },
-  xaxis: {
-    showgrid: true,
-    gridcolor: "#e0e0e0",
-    gridwidth: 1,
-    linecolor: "#e0e0e0",
-    linewidth: 1,
-    tickfont: {
-      size: 10,
-    },
-    zeroline: true,
-    zerolinecolor: "#666",
-    zerolinewidth: 1,
-  },
-  yaxis: {
-    showgrid: true,
-    gridcolor: "#e0e0e0",
-    gridwidth: 1,
-    linecolor: "#e0e0e0",
-    linewidth: 1,
-    tickfont: {
-      size: 10,
-    },
-    zeroline: true,
-    zerolinecolor: "#666",
-    zerolinewidth: 1,
-  },
-  autosize: true,
+  margin: { l: 50, r: 30, t: 30, b: 50 },
+  font: { family: "Arial, sans-serif", size: 12 },
+  paper_bgcolor: "rgba(255, 255, 255, 0.9)",
+  plot_bgcolor: "rgba(255, 255, 255, 0.5)",
 };
 
-// Initialize behavior distribution chart
+// Charts initialization status
+let chartsInitialized = false;
+
+// Data storage
+const accelerometerData = {
+  x: Array(20).fill(0),
+  y: Array(20).fill(0),
+  z: Array(20).fill(0),
+  time: Array(20).fill(""),
+};
+
+const gyroscopeData = {
+  x: Array(20).fill(0),
+  y: Array(20).fill(0),
+  z: Array(20).fill(0),
+  time: Array(20).fill(""),
+};
+
+// Initialize behavior chart
 function initBehaviorChart() {
-  const data = [
-    {
-      values: [1, 0],
-      labels: ["Normal", "Aggressive"],
-      type: "pie",
-      marker: {
-        colors: ["#4caf50", "#f44336"],
-      },
-      textinfo: "label+percent",
-      hole: 0.4,
-      textfont: {
-        size: 12,
-      },
-    },
-  ];
+  console.log("Initializing behavior chart...");
 
-  const layout = {
-    ...commonLayout,
-    showlegend: false,
-    margin: { t: 10, r: 10, b: 10, l: 10 },
-    height: undefined,
-    width: undefined,
-  };
+  try {
+    const behaviorChartElement = document.getElementById(
+      "behavior-distribution"
+    );
 
-  Plotly.newPlot("behavior-distribution", data, layout, chartConfig);
+    if (!behaviorChartElement) {
+      console.error(
+        "Cannot find behavior chart element with ID 'behavior-distribution'"
+      );
+      return false;
+    }
+
+    // Initial data to ensure the donut chart has proper spacing
+    const data = [
+      {
+        values: [100, 0],
+        labels: ["Normal", "Aggressive"],
+        type: "pie",
+        hole: 0.7,
+        textinfo: "label+percent",
+        textposition: "outside",
+        automargin: true,
+        marker: {
+          colors: ["#28a745", "#dc3545"],
+          line: {
+            color: "#FFFFFF",
+            width: 2,
+          },
+        },
+        showlegend: false,
+      },
+    ];
+
+    // Layout settings specifically for donut chart
+    const layout = {
+      autosize: true,
+      width: 320,
+      height: 320,
+      margin: { l: 0, r: 0, t: 0, b: 0, pad: 0 },
+      showlegend: false,
+      annotations: [
+        {
+          font: {
+            size: 20,
+            color: "#28a745",
+          },
+          showarrow: false,
+          text: "100%",
+          x: 0.5,
+          y: 0.5,
+        },
+      ],
+      paper_bgcolor: "rgba(0,0,0,0)",
+    };
+
+    Plotly.newPlot("behavior-distribution", data, layout, chartConfig);
+    console.log("Behavior chart initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("Error initializing behavior chart:", error);
+    return false;
+  }
 }
 
 // Initialize accelerometer chart
 function initAccelerometerChart() {
-  const data = [
-    {
-      x: [0],
-      y: [0],
-      name: "X",
-      type: "scatter",
-      mode: "lines",
-      line: {
-        color: "#2196f3",
-        width: 2,
-      },
-    },
-    {
-      x: [0],
-      y: [0],
-      name: "Y",
-      type: "scatter",
-      mode: "lines",
-      line: {
-        color: "#4caf50",
-        width: 2,
-      },
-    },
-    {
-      x: [0],
-      y: [0],
-      name: "Z",
-      type: "scatter",
-      mode: "lines",
-      line: {
-        color: "#f44336",
-        width: 2,
-      },
-    },
-  ];
+  console.log("Initializing accelerometer chart...");
 
-  const layout = {
-    ...commonLayout,
-    xaxis: {
-      ...commonLayout.xaxis,
-      title: {
-        text: "Time (s)",
-        font: {
-          size: 11,
-        },
-      },
-      range: [-5, 0],
-    },
-    yaxis: {
-      ...commonLayout.yaxis,
-      title: {
-        text: "Acceleration (m/s²)",
-        font: {
-          size: 11,
-        },
-      },
-      range: [-2, 2],
-    },
-    height: undefined,
-    width: undefined,
-  };
+  try {
+    const accelChartElement = document.getElementById("accelerometer-chart");
 
-  Plotly.newPlot("accelerometer-chart", data, layout, chartConfig);
+    if (!accelChartElement) {
+      console.error(
+        "Cannot find accelerometer chart element with ID 'accelerometer-chart'"
+      );
+      return false;
+    }
+
+    const currentTime = new Date().toLocaleTimeString();
+    const times = Array(20).fill(currentTime);
+
+    const data = [
+      {
+        x: times,
+        y: Array(20).fill(0),
+        type: "scatter",
+        mode: "lines",
+        name: "X-axis",
+        line: { color: "#ff0000", width: 2 },
+      },
+      {
+        x: times,
+        y: Array(20).fill(0),
+        type: "scatter",
+        mode: "lines",
+        name: "Y-axis",
+        line: { color: "#00ff00", width: 2 },
+      },
+      {
+        x: times,
+        y: Array(20).fill(0),
+        type: "scatter",
+        mode: "lines",
+        name: "Z-axis",
+        line: { color: "#0000ff", width: 2 },
+      },
+    ];
+
+    const layout = {
+      ...commonLayout,
+      title: "Accelerometer Data",
+      xaxis: {
+        title: "Time",
+        showgrid: true,
+        gridcolor: "rgba(200, 200, 200, 0.2)",
+      },
+      yaxis: {
+        title: "Acceleration (g)",
+        showgrid: true,
+        gridcolor: "rgba(200, 200, 200, 0.2)",
+        range: [-2, 2],
+      },
+      legend: {
+        x: 0,
+        y: 1,
+        bgcolor: "rgba(255, 255, 255, 0.5)",
+        bordercolor: "rgba(200, 200, 200, 0.5)",
+        borderwidth: 1,
+      },
+    };
+
+    Plotly.newPlot("accelerometer-chart", data, layout, chartConfig);
+    console.log("Accelerometer chart initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("Error initializing accelerometer chart:", error);
+    return false;
+  }
 }
 
 // Initialize gyroscope chart
 function initGyroscopeChart() {
-  const data = [
-    {
-      x: [0],
-      y: [0],
-      name: "Roll",
-      type: "scatter",
-      mode: "lines",
-      line: {
-        color: "#9c27b0",
-        width: 2,
-      },
-    },
-    {
-      x: [0],
-      y: [0],
-      name: "Pitch",
-      type: "scatter",
-      mode: "lines",
-      line: {
-        color: "#ff9800",
-        width: 2,
-      },
-    },
-    {
-      x: [0],
-      y: [0],
-      name: "Yaw",
-      type: "scatter",
-      mode: "lines",
-      line: {
-        color: "#795548",
-        width: 2,
-      },
-    },
-  ];
+  console.log("Initializing gyroscope chart...");
 
-  const layout = {
-    ...commonLayout,
-    xaxis: {
-      ...commonLayout.xaxis,
-      title: {
-        text: "Time (s)",
-        font: {
-          size: 11,
-        },
-      },
-      range: [-5, 0],
-    },
-    yaxis: {
-      ...commonLayout.yaxis,
-      title: {
-        text: "Angular Velocity (°/s)",
-        font: {
-          size: 11,
-        },
-      },
-      range: [-180, 180],
-    },
-    height: undefined,
-    width: undefined,
-  };
+  try {
+    const gyroChartElement = document.getElementById("gyroscope-chart");
 
-  Plotly.newPlot("gyroscope-chart", data, layout, chartConfig);
+    if (!gyroChartElement) {
+      console.error(
+        "Cannot find gyroscope chart element with ID 'gyroscope-chart'"
+      );
+      return false;
+    }
+
+    const currentTime = new Date().toLocaleTimeString();
+    const times = Array(20).fill(currentTime);
+
+    const data = [
+      {
+        x: times,
+        y: Array(20).fill(0),
+        type: "scatter",
+        mode: "lines",
+        name: "X-axis",
+        line: { color: "#ff0000", width: 2 },
+      },
+      {
+        x: times,
+        y: Array(20).fill(0),
+        type: "scatter",
+        mode: "lines",
+        name: "Y-axis",
+        line: { color: "#00ff00", width: 2 },
+      },
+      {
+        x: times,
+        y: Array(20).fill(0),
+        type: "scatter",
+        mode: "lines",
+        name: "Z-axis",
+        line: { color: "#0000ff", width: 2 },
+      },
+    ];
+
+    const layout = {
+      ...commonLayout,
+      title: "Gyroscope Data",
+      xaxis: {
+        title: "Time",
+        showgrid: true,
+        gridcolor: "rgba(200, 200, 200, 0.2)",
+      },
+      yaxis: {
+        title: "Angular Velocity (deg/s)",
+        showgrid: true,
+        gridcolor: "rgba(200, 200, 200, 0.2)",
+        range: [-180, 180],
+      },
+      legend: {
+        x: 0,
+        y: 1,
+        bgcolor: "rgba(255, 255, 255, 0.5)",
+        bordercolor: "rgba(200, 200, 200, 0.5)",
+        borderwidth: 1,
+      },
+    };
+
+    Plotly.newPlot("gyroscope-chart", data, layout, chartConfig);
+    console.log("Gyroscope chart initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("Error initializing gyroscope chart:", error);
+    return false;
+  }
 }
 
-// Update behavior distribution chart
-function updateBehaviorChart(data) {
-  const update = {
-    values: [data.normal, data.aggressive],
-  };
-  Plotly.update("behavior-distribution", update);
+// Update behavior chart
+function updateBehaviorChart(normalPercentage, aggressivePercentage) {
+  try {
+    if (!chartsInitialized) {
+      console.warn("Charts not initialized yet, cannot update behavior chart");
+      return;
+    }
+
+    console.log(
+      `Updating behavior chart - Normal: ${normalPercentage.toFixed(
+        1
+      )}%, Aggressive: ${aggressivePercentage.toFixed(1)}%`
+    );
+
+    // Data update
+    const update = {
+      values: [[normalPercentage, aggressivePercentage]],
+    };
+
+    // Update values and annotation
+    Plotly.update("behavior-distribution", update, {
+      annotations: [
+        {
+          font: {
+            size: 20,
+            color: normalPercentage >= 80 ? "#28a745" : "#dc3545",
+          },
+          showarrow: false,
+          text: `${Math.round(normalPercentage)}%`,
+          x: 0.5,
+          y: 0.5,
+        },
+      ],
+    });
+  } catch (error) {
+    console.error("Error updating behavior chart:", error);
+  }
 }
 
 // Update accelerometer chart
-function updateAccelerometerChart(data) {
-  const now = new Date();
-  const time = now.getTime() / 1000; // Convert to seconds
+function updateAccelerometerChart(x, y, z) {
+  try {
+    if (!chartsInitialized) {
+      console.warn(
+        "Charts not initialized yet, cannot update accelerometer chart"
+      );
+      return;
+    }
 
-  const update = {
-    x: [[time], [time], [time]],
-    y: [[data.x], [data.y], [data.z]],
-  };
+    // Get current time as string
+    const currentTime = new Date().toLocaleTimeString();
 
-  Plotly.extendTraces("accelerometer-chart", update, [0, 1, 2]);
+    // Shift existing data
+    accelerometerData.x.shift();
+    accelerometerData.y.shift();
+    accelerometerData.z.shift();
+    accelerometerData.time.shift();
 
-  // Update x-axis range to show last 5 seconds
-  Plotly.relayout("accelerometer-chart", {
-    "xaxis.range": [time - 5, time],
-  });
+    // Add new data
+    accelerometerData.x.push(x);
+    accelerometerData.y.push(y);
+    accelerometerData.z.push(z);
+    accelerometerData.time.push(currentTime);
+
+    // Update chart
+    const update = {
+      x: [
+        accelerometerData.time,
+        accelerometerData.time,
+        accelerometerData.time,
+      ],
+      y: [accelerometerData.x, accelerometerData.y, accelerometerData.z],
+    };
+
+    Plotly.update("accelerometer-chart", update);
+  } catch (error) {
+    console.error("Error updating accelerometer chart:", error);
+  }
 }
 
 // Update gyroscope chart
-function updateGyroscopeChart(data) {
-  const now = new Date();
-  const time = now.getTime() / 1000; // Convert to seconds
+function updateGyroscopeChart(x, y, z) {
+  try {
+    if (!chartsInitialized) {
+      console.warn("Charts not initialized yet, cannot update gyroscope chart");
+      return;
+    }
 
-  const update = {
-    x: [[time], [time], [time]],
-    y: [[data.roll], [data.pitch], [data.yaw]],
-  };
+    // Get current time as string
+    const currentTime = new Date().toLocaleTimeString();
 
-  Plotly.extendTraces("gyroscope-chart", update, [0, 1, 2]);
+    // Shift existing data
+    gyroscopeData.x.shift();
+    gyroscopeData.y.shift();
+    gyroscopeData.z.shift();
+    gyroscopeData.time.shift();
 
-  // Update x-axis range to show last 5 seconds
-  Plotly.relayout("gyroscope-chart", {
-    "xaxis.range": [time - 5, time],
-  });
+    // Add new data
+    gyroscopeData.x.push(x);
+    gyroscopeData.y.push(y);
+    gyroscopeData.z.push(z);
+    gyroscopeData.time.push(currentTime);
+
+    // Update chart
+    const update = {
+      x: [gyroscopeData.time, gyroscopeData.time, gyroscopeData.time],
+      y: [gyroscopeData.x, gyroscopeData.y, gyroscopeData.z],
+    };
+
+    Plotly.update("gyroscope-chart", update);
+  } catch (error) {
+    console.error("Error updating gyroscope chart:", error);
+  }
 }
 
 // Handle window resize
 function handleResize() {
-  const charts = [
-    "accelerometer-chart",
-    "gyroscope-chart",
-    "behavior-distribution",
-  ];
-  charts.forEach((chartId) => {
-    const chart = document.getElementById(chartId);
-    if (chart && chart.layout) {
-      Plotly.Plots.resize(chartId);
-    }
-  });
+  if (chartsInitialized) {
+    Plotly.relayout("behavior-distribution", {
+      "xaxis.autorange": true,
+      "yaxis.autorange": true,
+    });
+
+    Plotly.relayout("accelerometer-chart", {
+      "xaxis.autorange": true,
+      "yaxis.autorange": true,
+    });
+
+    Plotly.relayout("gyroscope-chart", {
+      "xaxis.autorange": true,
+      "yaxis.autorange": true,
+    });
+  }
 }
 
 // Initialize all charts
+function initializeCharts() {
+  console.log("Initializing all charts...");
+
+  // Give the DOM a moment to fully render
+  setTimeout(() => {
+    const behaviorSuccess = initBehaviorChart();
+    const accelSuccess = initAccelerometerChart();
+    const gyroSuccess = initGyroscopeChart();
+
+    chartsInitialized = behaviorSuccess && accelSuccess && gyroSuccess;
+
+    if (chartsInitialized) {
+      console.log("All charts initialized successfully");
+
+      // Set up event listeners
+      window.addEventListener("resize", handleResize);
+
+      // Set up tab switching to redraw charts
+      const tabElements = document.querySelectorAll('[data-bs-toggle="tab"]');
+      tabElements.forEach((tabElement) => {
+        tabElement.addEventListener("shown.bs.tab", (event) => {
+          handleResize();
+        });
+      });
+
+      // Initial behavior chart data
+      updateBehaviorChart(100, 0);
+    } else {
+      console.error("Failed to initialize all charts");
+    }
+  }, 500);
+}
+
+// Initialize charts when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-  initBehaviorChart();
-  initAccelerometerChart();
-  initGyroscopeChart();
-
-  // Handle window resize
-  window.addEventListener("resize", handleResize);
-
-  // Handle tab switching
-  document.querySelectorAll(".nav-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setTimeout(handleResize, 100); // Allow time for display changes
-    });
-  });
+  console.log("DOM loaded, initializing charts...");
+  initializeCharts();
 });
 
-// Export functions for use in other modules
+// Export chart update functions
 window.charts = {
+  initializeCharts,
   updateBehaviorChart,
   updateAccelerometerChart,
   updateGyroscopeChart,
+  handleResize,
 };

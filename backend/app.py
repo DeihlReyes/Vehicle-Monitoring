@@ -232,7 +232,19 @@ async def broadcast_sensor_data():
             # Get MPU6050 data with error handling
             if mpu_sensor:
                 try:
-                    sensor_data = mpu_sensor.get_data()
+                    raw_sensor_data = mpu_sensor.get_data()
+                    sensor_data = {
+                        'accelerometer': {
+                            'x': raw_sensor_data['accelerometer']['x'],
+                            'y': raw_sensor_data['accelerometer']['y'],
+                            'z': raw_sensor_data['accelerometer']['z']
+                        },
+                        'gyroscope': {
+                            'roll': raw_sensor_data['gyroscope']['x'],  # Map x to roll
+                            'pitch': raw_sensor_data['gyroscope']['y'], # Map y to pitch
+                            'yaw': raw_sensor_data['gyroscope']['z']    # Map z to yaw
+                        }
+                    }
                     if current_session_id:
                         db_manager.store_sensor_data(
                             current_session_id,
@@ -243,12 +255,12 @@ async def broadcast_sensor_data():
                     await handle_hardware_error("MPU6050", e)
                     sensor_data = {
                         'accelerometer': {'x': 0, 'y': 0, 'z': 0},
-                        'gyroscope': {'x': 0, 'y': 0, 'z': 0}
+                        'gyroscope': {'roll': 0, 'pitch': 0, 'yaw': 0}
                     }
             else:
                 sensor_data = {
                     'accelerometer': {'x': 0, 'y': 0, 'z': 0},
-                    'gyroscope': {'x': 0, 'y': 0, 'z': 0}
+                    'gyroscope': {'roll': 0, 'pitch': 0, 'yaw': 0}
                 }
 
             # Get OBD data with error handling
@@ -278,7 +290,7 @@ async def broadcast_sensor_data():
             except Exception as e:
                 logger.error(f"Behavior prediction error: {str(e)}")
                 await update_system_health("data", str(e))
-                behavior_data = "unknown"
+                behavior_data = "normal"
 
             # Combine all data
             data = {
@@ -293,7 +305,7 @@ async def broadcast_sensor_data():
                 }
             }
 
-            # Broadcast to all connected clients with error handling
+            # Broadcast to all connected clients
             disconnected_clients = set()
             for client in connected_clients:
                 try:

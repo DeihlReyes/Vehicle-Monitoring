@@ -45,6 +45,11 @@ body {
   height: 100%;
 }
 
+.behavior-chart {
+  grid-column: 1;
+  margin: auto;
+}
+
 .behavior-summary {
   grid-column: 1 / -1;
   background: white;

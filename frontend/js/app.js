@@ -1,9 +1,114 @@
+// Define global behavior functions first - before any class definitions
+// This ensures they're available immediately
+window.app = {
+  updateBehaviorStatus: function (status) {
+    console.log("Global updateBehaviorStatus called with:", status);
+    const behaviorStatus = document.getElementById("behavior-status");
+    if (!behaviorStatus) {
+      console.error("Behavior status element not found");
+      return;
+    }
+
+    behaviorStatus.textContent = status;
+    behaviorStatus.className =
+      "behavior-indicator " +
+      (status.toLowerCase().includes("aggressive") ? "aggressive" : "normal");
+  },
+
+  addEvent: function (event) {
+    console.log("Global addEvent called with:", event);
+    const eventsList = document.getElementById("events-list");
+    if (!eventsList) {
+      console.error("Events list element not found");
+      return;
+    }
+
+    const eventItem = document.createElement("div");
+    eventItem.className = "event-item";
+
+    // Format the time
+    const time = event.timestamp
+      ? new Date(event.timestamp).toLocaleTimeString()
+      : new Date().toLocaleTimeString();
+
+    // Format the event type to be more user-friendly
+    let eventType = event.type || "Unknown";
+    if (eventType.includes("_")) {
+      // Convert aggressive_braking to Aggressive Braking
+      eventType = eventType
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+    } else {
+      // Just capitalize first letter
+      eventType = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+    }
+
+    // Add colored badge based on event type
+    const isAggressive = (event.type || "").includes("aggressive");
+
+    eventItem.innerHTML = `
+      <span class="event-badge ${
+        isAggressive ? "aggressive" : "normal"
+      }">${eventType}</span>
+      <span class="event-time">${time}</span>
+    `;
+
+    eventsList.insertBefore(eventItem, eventsList.firstChild);
+
+    // Keep only last 10 events
+    while (eventsList.children.length > 10) {
+      eventsList.removeChild(eventsList.lastChild);
+    }
+  },
+
+  updateOBDMetrics: function (data) {
+    console.log("Global updateOBDMetrics called with:", data);
+    const updateElement = function (id, value, unit = "") {
+      const element = document.getElementById(id);
+      if (element) {
+        element.textContent =
+          value !== null && value !== undefined
+            ? `${typeof value === "number" ? value.toFixed(1) : value}${unit}`
+            : "N/A";
+      }
+    };
+
+    updateElement("rpm-value", data.rpm);
+    updateElement("speed-value", data.speed, " km/h");
+    updateElement("throttle-value", data.throttle, "%");
+    updateElement("coolant-temp", data.coolant, "°C");
+    updateElement("intake-temp", data.intake, " kPa");
+    updateElement("battery-voltage", data.battery, "V");
+    updateElement("engine-load", data.engineLoad, "%");
+  },
+};
+
 class App {
   constructor() {
     this.currentTab = "dashboard";
-    this.setupEventListeners();
-    this.setupWebSocket();
-    this.loadInitialData();
+    this.initializeApp();
+  }
+
+  async initializeApp() {
+    try {
+      // First, initialize charts
+      if (
+        window.charts &&
+        typeof window.charts.initializeCharts === "function"
+      ) {
+        await window.charts.initializeCharts();
+      } else {
+        console.error("Charts module not loaded properly");
+      }
+
+      // Then setup other components
+      this.setupEventListeners();
+      this.setupWebSocket();
+      this.loadInitialData();
+    } catch (error) {
+      console.error("Error initializing app:", error);
+    }
   }
 
   setupEventListeners() {
@@ -12,7 +117,7 @@ class App {
     const tabContents = document.querySelectorAll(".tab-content");
 
     // Tab switching functionality
-    function switchTab(tabId) {
+    const switchTab = (tabId) => {
       // Hide all tabs
       tabContents.forEach((tab) => {
         tab.classList.add("hidden");
@@ -35,9 +140,14 @@ class App {
         selectedBtn.classList.add("active");
       }
 
+      // Store current tab
+      this.currentTab = tabId;
+
       // Trigger resize event for charts
-      window.dispatchEvent(new Event("resize"));
-    }
+      if (window.charts && typeof window.charts.handleResize === "function") {
+        setTimeout(() => window.charts.handleResize(), 100);
+      }
+    };
 
     // Event listeners for tab buttons
     tabButtons.forEach((button) => {
@@ -55,11 +165,16 @@ class App {
   }
 
   setupWebSocket() {
-    wsHandler.onData((data) => {
+    if (!window.wsHandler) {
+      console.error("WebSocket handler not initialized");
+      return;
+    }
+
+    window.wsHandler.onData((data) => {
       this.updateRealTimeData(data);
     });
 
-    wsHandler.onStatusChange((connected) => {
+    window.wsHandler.onStatusChange((connected) => {
       this.updateConnectionStatus(connected);
     });
   }
@@ -74,7 +189,12 @@ class App {
       // Load behavior statistics
       const statsResponse = await fetch("/statistics/behavior");
       const stats = await statsResponse.json();
-      chartManager.updateBehaviorStats(stats);
+      if (
+        window.charts &&
+        typeof window.charts.updateBehaviorChart === "function"
+      ) {
+        window.charts.updateBehaviorChart(stats);
+      }
     } catch (error) {
       console.error("Failed to load initial data:", error);
     }
@@ -82,13 +202,17 @@ class App {
 
   updateRealTimeData(data) {
     // Update motion data charts
-    if (data.sensor_data) {
-      chartManager.updateMotionData(data.sensor_data);
+    if (data.sensor_data && window.charts) {
+      if (typeof window.charts.updateAccelerometerChart === "function") {
+        window.charts.updateAccelerometerChart(data.sensor_data.accelerometer);
+      }
+      if (typeof window.charts.updateGyroscopeChart === "function") {
+        window.charts.updateGyroscopeChart(data.sensor_data.gyroscope);
+      }
     }
 
     // Update OBD data
     if (data.obd_data) {
-      chartManager.updateOBDData(data.obd_data);
       this.updateOBDDisplay(data.obd_data);
     }
 
@@ -105,66 +229,48 @@ class App {
 
   updateSessionsList(sessions) {
     const container = document.getElementById("sessions-list");
+    if (!container) return;
+
     container.innerHTML = sessions
       .map(
         (session) => `
-            <div class="session-item">
-                <div class="d-flex justify-content-between">
-                    <span>${new Date(
-                      session.start_time
-                    ).toLocaleString()}</span>
-                    <span class="badge ${
-                      session.total_aggressive_events > 5
-                        ? "bg-danger"
-                        : "bg-success"
-                    }">
-                        ${session.total_aggressive_events} events
-                    </span>
-                </div>
-                <div class="small text-muted">
-                    Max Speed: ${session.max_speed.toFixed(1)} km/h | 
-                    Avg Speed: ${session.average_speed.toFixed(1)} km/h
-                </div>
+          <div class="session-item">
+            <div class="d-flex justify-content-between">
+              <span>${new Date(session.start_time).toLocaleString()}</span>
+              <span class="badge ${
+                session.total_aggressive_events > 5 ? "bg-danger" : "bg-success"
+              }">
+                ${session.total_aggressive_events} events
+              </span>
             </div>
+            <div class="small text-muted">
+              Max Speed: ${session.max_speed?.toFixed(1) || 0} km/h | 
+              Avg Speed: ${session.average_speed?.toFixed(1) || 0} km/h
+            </div>
+          </div>
         `
       )
       .join("");
   }
 
   updateOBDDisplay(data) {
-    const systemStatus = document.getElementById("system-status");
-    systemStatus.innerHTML = `
-            <div class="obd-status">
-                <div class="mb-2">
-                    <strong>Coolant Temp:</strong> ${
-                      data.COOLANT_TEMP
-                        ? data.COOLANT_TEMP.toFixed(1) + "°C"
-                        : "N/A"
-                    }
-                </div>
-                <div class="mb-2">
-                    <strong>Engine Load:</strong> ${
-                      data.ENGINE_LOAD
-                        ? data.ENGINE_LOAD.toFixed(1) + "%"
-                        : "N/A"
-                    }
-                </div>
-                <div class="mb-2">
-                    <strong>Battery:</strong> ${
-                      data.CONTROL_MODULE_VOLTAGE
-                        ? data.CONTROL_MODULE_VOLTAGE.toFixed(1) + "V"
-                        : "N/A"
-                    }
-                </div>
-                <div>
-                    <strong>Throttle:</strong> ${
-                      data.THROTTLE_POS
-                        ? data.THROTTLE_POS.toFixed(1) + "%"
-                        : "N/A"
-                    }
-                </div>
-            </div>
-        `;
+    const updateElement = (id, value, unit = "") => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.textContent =
+          value !== null && value !== undefined
+            ? `${value.toFixed(1)}${unit}`
+            : "N/A";
+      }
+    };
+
+    updateElement("rpm-value", data.RPM);
+    updateElement("speed-value", data.SPEED, " km/h");
+    updateElement("throttle-value", data.THROTTLE_POS, "%");
+    updateElement("coolant-temp", data.COOLANT_TEMP, "°C");
+    updateElement("intake-temp", data.INTAKE_PRESSURE, " kPa");
+    updateElement("battery-voltage", data.CONTROL_MODULE_VOLTAGE, "V");
+    updateElement("engine-load", data.ENGINE_LOAD, "%");
   }
 
   updateSystemStatus(health) {
@@ -176,18 +282,23 @@ class App {
 
     const statusIndicator = document.createElement("div");
     statusIndicator.className = `status-indicator ${
-      statusClasses[health.status]
+      statusClasses[health.status] || statusClasses.error
     }`;
 
     const statusText = document.createElement("span");
     statusText.textContent = `System Status: ${health.status.toUpperCase()}`;
 
     const statusContainer = document.getElementById("system-status");
-    statusContainer.prepend(statusIndicator, statusText);
+    if (statusContainer) {
+      statusContainer.innerHTML = "";
+      statusContainer.append(statusIndicator, statusText);
+    }
   }
 
   updateConnectionStatus(connected) {
     const statusContainer = document.getElementById("system-status");
+    if (!statusContainer) return;
+
     const connectionStatus = document.createElement("div");
     connectionStatus.className = `connection-status ${
       connected ? "connected" : "disconnected"
@@ -195,102 +306,23 @@ class App {
     connectionStatus.textContent = `Connection: ${
       connected ? "Connected" : "Disconnected"
     }`;
+
+    // Remove any existing connection status before adding new one
+    const existingStatus = statusContainer.querySelector(".connection-status");
+    if (existingStatus) {
+      existingStatus.remove();
+    }
     statusContainer.prepend(connectionStatus);
   }
 
   handleResize() {
-    // Trigger chart resize for current tab
-    if (this.currentTab === "behavior") {
-      Plotly.Plots.resize("accelerometer-chart");
-      Plotly.Plots.resize("gyroscope-chart");
-    } else if (this.currentTab === "obd") {
-      Plotly.Plots.resize("engine-gauges");
+    if (window.charts && typeof window.charts.handleResize === "function") {
+      window.charts.handleResize();
     }
   }
 }
 
 // Initialize application when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-  window.app = new App();
+  window.appInstance = new App();
 });
-
-// Update behavior counts
-function updateBehaviorCounts(counts) {
-  const aggressiveCount = document.getElementById("aggressive-count");
-  const normalCount = document.getElementById("normal-count");
-
-  if (aggressiveCount) {
-    aggressiveCount.textContent = counts.aggressive;
-  }
-  if (normalCount) {
-    normalCount.textContent = counts.normal;
-  }
-}
-
-// Add event to recent events list
-function addEvent(event) {
-  const eventsList = document.getElementById("events-list");
-  if (!eventsList) return;
-
-  const eventItem = document.createElement("div");
-  eventItem.className = "event-item";
-
-  const time = new Date().toLocaleTimeString();
-  eventItem.innerHTML = `
-    <span>${event.type}</span>
-    <span>${time}</span>
-  `;
-
-  eventsList.insertBefore(eventItem, eventsList.firstChild);
-
-  // Keep only last 10 events
-  while (eventsList.children.length > 10) {
-    eventsList.removeChild(eventsList.lastChild);
-  }
-}
-
-// Update behavior status
-function updateBehaviorStatus(status) {
-  const behaviorStatus = document.getElementById("behavior-status");
-  if (!behaviorStatus) return;
-
-  behaviorStatus.textContent = status;
-
-  // Update styling based on status
-  if (status.toLowerCase().includes("aggressive")) {
-    behaviorStatus.style.backgroundColor = "#ffebee";
-    behaviorStatus.style.color = "#c62828";
-  } else {
-    behaviorStatus.style.backgroundColor = "#e8f5e9";
-    behaviorStatus.style.color = "#2e7d32";
-  }
-}
-
-// Update OBD metrics
-function updateOBDMetrics(data) {
-  // Update each metric if the element exists
-  const metrics = {
-    "rpm-value": data.rpm || 0,
-    "speed-value": `${data.speed || 0} km/h`,
-    "throttle-value": `${data.throttle || 0}%`,
-    "coolant-temp": `${data.coolant || 0}°C`,
-    "intake-temp": `${data.intake || 0}°C`,
-    "battery-voltage": `${data.battery || 0}V`,
-    "engine-load": `${data.engineLoad || 0}%`,
-  };
-
-  Object.entries(metrics).forEach(([id, value]) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.textContent = value;
-    }
-  });
-}
-
-// Export functions for use in other modules
-window.app = {
-  updateBehaviorCounts,
-  addEvent,
-  updateBehaviorStatus,
-  updateOBDMetrics,
-};
