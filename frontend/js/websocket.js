@@ -185,58 +185,40 @@ class WebSocketHandler {
 
       // Update counts based on the event type
       this.behaviorStats.total++;
+      if (this.behaviorStats[behavior.event] !== undefined) {
+        this.behaviorStats[behavior.event]++;
+      }
 
-      switch (behavior.event) {
-        case "aggressive_acceleration":
-          this.behaviorStats.aggressive_acceleration++;
-          break;
-        case "normal_acceleration":
-          this.behaviorStats.normal_acceleration++;
-          break;
-        case "aggressive_deceleration":
-          this.behaviorStats.aggressive_deceleration++;
-          break;
-        case "normal_deceleration":
-          this.behaviorStats.normal_deceleration++;
-          break;
-        case "aggressive_lane_change":
-          this.behaviorStats.aggressive_lane_change++;
-          break;
-        case "normal_lane_change":
-          this.behaviorStats.normal_lane_change++;
-          break;
+      // Update the current behavior display in the OBD tab
+      const behaviorStatus = document.getElementById("behavior-status");
+      if (behaviorStatus) {
+        let statusClass = behavior.event.startsWith("aggressive")
+          ? "aggressive"
+          : "normal";
+        behaviorStatus.className = `behavior-indicator ${statusClass}`;
+        behaviorStatus.textContent = this.formatBehaviorType(behavior.event);
       }
 
       // Update UI
       this.updateBehaviorUI();
 
-      // Update the behavior chart
-      // Calculate percentages for each behavior
-      const total = this.behaviorStats.total;
+      // Calculate percentages for behavior chart
+      const total = this.behaviorStats.total || 1; // Avoid division by zero
       const percentages = {
         aggressive_acceleration:
-          total > 0
-            ? (this.behaviorStats.aggressive_acceleration / total) * 100
-            : 0,
+          (this.behaviorStats.aggressive_acceleration / total) * 100,
         normal_acceleration:
-          total > 0
-            ? (this.behaviorStats.normal_acceleration / total) * 100
-            : 0,
+          (this.behaviorStats.normal_acceleration / total) * 100,
         aggressive_deceleration:
-          total > 0
-            ? (this.behaviorStats.aggressive_deceleration / total) * 100
-            : 0,
+          (this.behaviorStats.aggressive_deceleration / total) * 100,
         normal_deceleration:
-          total > 0
-            ? (this.behaviorStats.normal_deceleration / total) * 100
-            : 0,
+          (this.behaviorStats.normal_deceleration / total) * 100,
         aggressive_lane_change:
-          total > 0
-            ? (this.behaviorStats.aggressive_lane_change / total) * 100
-            : 0,
+          (this.behaviorStats.aggressive_lane_change / total) * 100,
         normal_lane_change:
-          total > 0 ? (this.behaviorStats.normal_lane_change / total) * 100 : 0,
+          (this.behaviorStats.normal_lane_change / total) * 100,
       };
+
       console.log("Behavior distribution:", percentages);
 
       if (

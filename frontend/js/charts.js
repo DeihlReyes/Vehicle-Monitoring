@@ -59,46 +59,53 @@ function initBehaviorChart() {
       return false;
     }
 
-    // Initial data to ensure the donut chart has proper spacing
+    // Initial data for all behavior types
     const data = [
       {
-        values: [100, 0],
-        labels: ["Normal", "Aggressive"],
+        values: [16.67, 16.67, 16.67, 16.67, 16.67, 16.67],
+        labels: [
+          "Aggressive Acceleration",
+          "Normal Acceleration",
+          "Aggressive Deceleration",
+          "Normal Deceleration",
+          "Aggressive Lane Change",
+          "Normal Lane Change",
+        ],
         type: "pie",
-        hole: 0.7,
+        hole: 0.4,
         textinfo: "label+percent",
         textposition: "outside",
         automargin: true,
         marker: {
-          colors: ["#28a745", "#dc3545"],
+          colors: [
+            "#dc3545", // Aggressive Acceleration - Red
+            "#28a745", // Normal Acceleration - Green
+            "#ffc107", // Aggressive Deceleration - Yellow
+            "#17a2b8", // Normal Deceleration - Blue
+            "#fd7e14", // Aggressive Lane Change - Orange
+            "#20c997", // Normal Lane Change - Teal
+          ],
           line: {
             color: "#FFFFFF",
             width: 2,
           },
         },
-        showlegend: false,
       },
     ];
 
-    // Layout settings specifically for donut chart
+    // Layout settings for pie chart
     const layout = {
       autosize: true,
       width: 320,
       height: 320,
-      margin: { l: 0, r: 0, t: 0, b: 0, pad: 0 },
-      showlegend: false,
-      annotations: [
-        {
-          font: {
-            size: 20,
-            color: "#28a745",
-          },
-          showarrow: false,
-          text: "100%",
-          x: 0.5,
-          y: 0.5,
-        },
-      ],
+      margin: { l: 50, r: 50, t: 30, b: 30, pad: 4 },
+      showlegend: true,
+      legend: {
+        orientation: "h",
+        xanchor: "center",
+        y: -0.2,
+        x: 0.5,
+      },
       paper_bgcolor: "rgba(0,0,0,0)",
     };
 
@@ -263,40 +270,24 @@ function initGyroscopeChart() {
   }
 }
 
-// Update behavior chart
-function updateBehaviorChart(normalPercentage, aggressivePercentage) {
+// Update behavior chart with new percentages
+function updateBehaviorChart(percentages) {
   try {
-    if (!chartsInitialized) {
-      console.warn("Charts not initialized yet, cannot update behavior chart");
-      return;
-    }
+    const values = [
+      percentages.aggressive_acceleration,
+      percentages.normal_acceleration,
+      percentages.aggressive_deceleration,
+      percentages.normal_deceleration,
+      percentages.aggressive_lane_change,
+      percentages.normal_lane_change,
+    ];
 
-    console.log(
-      `Updating behavior chart - Normal: ${normalPercentage.toFixed(
-        1
-      )}%, Aggressive: ${aggressivePercentage.toFixed(1)}%`
-    );
-
-    // Data update
     const update = {
-      values: [[normalPercentage, aggressivePercentage]],
+      values: [values],
     };
 
-    // Update values and annotation
-    Plotly.update("behavior-distribution", update, {
-      annotations: [
-        {
-          font: {
-            size: 20,
-            color: normalPercentage >= 80 ? "#28a745" : "#dc3545",
-          },
-          showarrow: false,
-          text: `${Math.round(normalPercentage)}%`,
-          x: 0.5,
-          y: 0.5,
-        },
-      ],
-    });
+    Plotly.update("behavior-distribution", update);
+    console.log("Behavior chart updated with new values:", values);
   } catch (error) {
     console.error("Error updating behavior chart:", error);
   }
@@ -425,7 +416,14 @@ function initializeCharts() {
       });
 
       // Initial behavior chart data
-      updateBehaviorChart(100, 0);
+      updateBehaviorChart({
+        aggressive_acceleration: 0,
+        normal_acceleration: 0,
+        aggressive_deceleration: 0,
+        normal_deceleration: 0,
+        aggressive_lane_change: 0,
+        normal_lane_change: 0,
+      });
     } else {
       console.error("Failed to initialize all charts");
     }
