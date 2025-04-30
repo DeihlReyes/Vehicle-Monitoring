@@ -2,7 +2,6 @@ from quart import Quart, websocket, jsonify
 import asyncio
 import json
 from datetime import datetime
-import obd
 from mpu6050 import MPU6050
 from behavior_model import BehaviorPredictor
 from database import DatabaseManager
@@ -11,7 +10,7 @@ import sys
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
-from obd import OBDInterface  # Import the new OBDInterface class
+from obd1 import OBDInterface  # Import the new OBDInterface class
 
 # Error handling classes
 class SensorError(Exception):
