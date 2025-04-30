@@ -2,7 +2,7 @@ from quart import Quart, websocket, jsonify
 import asyncio
 import json
 from datetime import datetime
-import obd
+import backend.obd1 as obd1
 from mpu6050 import MPU6050
 from behavior_model import BehaviorPredictor
 from database import DatabaseManager
@@ -11,7 +11,7 @@ import sys
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
-from obd import OBDInterface  # Import the new OBDInterface class
+from backend.obd1 import OBDInterface  # Import the new OBDInterface class
 
 # Error handling classes
 class SensorError(Exception):
@@ -337,8 +337,14 @@ async def broadcast_sensor_data():
                         logger.error(f"Failed to connect to OBD: {str(e)}")
                 raw_obd_data = {}
                 readable_obd_data = {}
-            # Use the readable OBD data for frontend
-            obd_data = readable_obd_data
+            # Use the readable OBD data for frontend, with robust fallback
+            try:
+                obd_data = readable_obd_data if hasattr(obd_interface, 'get_readable_data') else raw_obd_data
+                if not hasattr(obd_interface, 'get_readable_data'):
+                    logger.warning('OBDInterface is missing get_readable_data(). Using raw OBD data as fallback.')
+            except Exception as e:
+                logger.error(f'Error using get_readable_data: {str(e)}')
+                obd_data = raw_obd_data
 
             # Get behavior prediction with error handling
             try:
