@@ -3,6 +3,9 @@ import tensorflow as tf
 from collections import deque
 import threading
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BehaviorPredictor:
     def __init__(self, model_path=None, sequence_length=50):
@@ -11,18 +14,27 @@ class BehaviorPredictor:
         self.lock = threading.Lock()
         self.latest_prediction = None
         self.behaviors = ['normal_driving', 'aggressive_acceleration', 'aggressive_braking', 'aggressive_turning']
-        
-        # Initialize model
-        if model_path:
-            self.model = tf.keras.models.load_model(model_path)
-        else:
-            self.model = self._create_model()
-            
+        self.model = None
+        # Initialize model with error handling
+        try:
+            if model_path:
+                self.model = tf.keras.models.load_model(model_path)
+                logger.info(f"Loaded behavior model from {model_path}")
+            else:
+                self.model = self._create_model()
+                logger.info("Created new behavior model (untrained)")
+        except Exception as e:
+            logger.error(f"Failed to load or create behavior model: {str(e)}")
+            self.model = None
         # Start prediction thread
         self.running = True
-        self.prediction_thread = threading.Thread(target=self._prediction_loop)
-        self.prediction_thread.daemon = True
-        self.prediction_thread.start()
+        try:
+            self.prediction_thread = threading.Thread(target=self._prediction_loop)
+            self.prediction_thread.daemon = True
+            self.prediction_thread.start()
+        except Exception as e:
+            logger.error(f"Failed to start prediction thread: {str(e)}")
+            self.running = False
 
     def _create_model(self):
         # Create a more sophisticated LSTM model with multiple layers
@@ -77,36 +89,58 @@ class BehaviorPredictor:
 
     def _prediction_loop(self):
         while self.running:
-            if len(self.data_buffer) >= self.sequence_length:
-                with self.lock:
-                    # Convert buffer to numpy array
-                    data = np.array(list(self.data_buffer))
-                    
-                    # Enhanced normalization using robust scaling
-                    mean = np.mean(data, axis=0)
-                    std = np.std(data, axis=0)
-                    data = (data - mean) / (std + 1e-7)
-                    
-                    # Reshape for model input
-                    data = np.expand_dims(data, axis=0)
-                    
-                    # Make prediction
-                    prediction = self.model.predict(data, verbose=0)
-                    self.latest_prediction = {
-                        'behavior': self.behaviors[np.argmax(prediction[0])],
-                        'confidence': float(np.max(prediction[0])),
-                        'timestamp': time.time()
-                    }
-            
-            time.sleep(0.1)  # Predict every 100ms
+            try:
+                if self.model is None:
+                    logger.warning("Behavior model is not loaded; skipping prediction.")
+                    time.sleep(1)
+                    continue
+                if len(self.data_buffer) >= self.sequence_length:
+                    with self.lock:
+                        # Convert buffer to numpy array
+                        data = np.array(list(self.data_buffer))
+                        
+                        # Enhanced normalization using robust scaling
+                        mean = np.mean(data, axis=0)
+                        std = np.std(data, axis=0)
+                        data = (data - mean) / (std + 1e-7)
+                        
+                        # Reshape for model input
+                        data = np.expand_dims(data, axis=0)
+                        
+                        # Make prediction
+                        try:
+                            prediction = self.model.predict(data, verbose=0)
+                            self.latest_prediction = {
+                                'behavior': self.behaviors[np.argmax(prediction[0])],
+                                'confidence': float(np.max(prediction[0])),
+                                'timestamp': time.time()
+                            }
+                        except Exception as e:
+                            logger.error(f"Behavior model prediction error: {str(e)}")
+                            self.latest_prediction = {
+                                'behavior': 'Prediction Error',
+                                'confidence': 0.0,
+                                'timestamp': time.time()
+                            }
+                time.sleep(0.1)  # Predict every 100ms
+            except Exception as e:
+                logger.error(f"Error in prediction loop: {str(e)}")
+                time.sleep(1)
 
     def get_latest_prediction(self):
-        return self.latest_prediction if self.latest_prediction else {
-            'behavior': 'Insufficient Data',
-            'confidence': 0.0,
-            'timestamp': time.time()
-        }
+        if self.latest_prediction:
+            return self.latest_prediction
+        else:
+            logger.warning("No prediction available yet; returning default.")
+            return {
+                'behavior': 'Insufficient Data',
+                'confidence': 0.0,
+                'timestamp': time.time()
+            }
 
     def stop(self):
         self.running = False
-        self.prediction_thread.join() 
+        try:
+            self.prediction_thread.join()
+        except Exception as e:
+            logger.error(f"Error stopping prediction thread: {str(e)}") 

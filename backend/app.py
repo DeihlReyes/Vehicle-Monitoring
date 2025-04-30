@@ -11,6 +11,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from obd1 import OBDInterface  # Import the new OBDInterface class
+import os
 
 # Error handling classes
 class SensorError(Exception):
@@ -90,7 +91,13 @@ except Exception as e:
     obd_interface = None
 
 # Initialize behavior predictor
-behavior_predictor = BehaviorPredictor()
+model_path = os.path.join(os.path.dirname(__file__), 'model-1.h5')
+if os.path.exists(model_path):
+    logger.info(f"Behavior model file found at {model_path}, loading model.")
+    behavior_predictor = BehaviorPredictor(model_path=model_path)
+else:
+    logger.warning(f"Behavior model file not found at {model_path}, using untrained model.")
+    behavior_predictor = BehaviorPredictor()
 
 # Store connected WebSocket clients
 connected_clients = set()
