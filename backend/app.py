@@ -10,7 +10,7 @@ import sys
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
-from backend.obd1 import OBDInterface  # Import the new OBDInterface class
+from obd1 import get_obd_data, get_fuel_status_description, calculate_o2_sensor_status
 
 # Error handling classes
 class SensorError(Exception):
@@ -77,18 +77,6 @@ except Exception as e:
     logger.error(f"Failed to initialize MPU6050: {str(e)}")
     mpu_sensor = None
 
-# Initialize OBD interface with the new implementation
-try:
-    obd_interface = OBDInterface()
-    if obd_interface.connect():
-        logger.info("OBD connection established successfully")
-    else:
-        logger.error("Failed to establish OBD connection")
-        obd_interface = None
-except Exception as e:
-    logger.error(f"Failed to initialize OBD connection: {str(e)}")
-    obd_interface = None
-
 # Initialize behavior predictor
 behavior_predictor = BehaviorPredictor()
 
@@ -105,21 +93,21 @@ async def update_system_health(error_type: str = None, error_message: str = None
     
     # Check component status
     system_health.mpu_sensor_ok = mpu_sensor is not None and getattr(mpu_sensor, 'is_initialized', False)
-    system_health.obd_connection_ok = obd_interface is not None and obd_interface.is_connected()
+    system_health.obd_connection_ok = False  # OBD connection is no longer tracked
     
     # Determine overall system status
     if system_health.error_count["hardware"] > 10 or system_health.error_count["data"] > 20:
         system_health.status = SystemStatus.ERROR
     elif system_health.error_count["hardware"] > 5 or system_health.error_count["data"] > 10:
         system_health.status = SystemStatus.WARNING
-    elif system_health.mpu_sensor_ok and system_health.obd_connection_ok:
+    elif system_health.mpu_sensor_ok:
         system_health.status = SystemStatus.OK
     else:
         system_health.status = SystemStatus.WARNING
 
 async def handle_hardware_error(component: str, error: Exception):
     """Handle hardware-related errors with retry logic"""
-    global mpu_sensor, obd_interface
+    global mpu_sensor
     
     logger.error(f"{component} error: {str(error)}")
     await update_system_health("hardware", str(error))
@@ -149,44 +137,6 @@ async def handle_hardware_error(component: str, error: Exception):
         except Exception as e:
             logger.error(f"Failed to reinitialize MPU6050: {str(e)}")
             mpu_sensor = None
-    
-    elif component == "OBD" and obd_interface:
-        for attempt in range(HARDWARE_RETRY_ATTEMPTS):
-            try:
-                logger.info(f"OBD reconnection attempt {attempt+1}/{HARDWARE_RETRY_ATTEMPTS}")
-                obd_interface.disconnect()
-                await asyncio.sleep(1)  # Add delay before reconnection
-                
-                if obd_interface.connect():
-                    # Verify connection by trying to get data
-                    test_data = obd_interface.get_data()
-                    if any(value is not None for value in test_data.values()):
-                        logger.info(f"OBD reconnection successful, verified with data")
-                        return True
-                    else:
-                        logger.warning("OBD reconnected but no data available")
-                else:
-                    logger.warning("OBD connection attempt failed")
-            except Exception as e:
-                logger.error(f"OBD reconnection attempt {attempt+1} failed: {str(e)}")
-                await asyncio.sleep(2)  # Longer delay between attempts
-        
-        # All retry attempts failed, try to completely reinitialize
-        logger.warning("All OBD reconnection attempts failed, reinitializing OBD interface...")
-        try:
-            obd_interface = None
-            await asyncio.sleep(2)  # Brief delay before reinitializing
-            obd_interface = OBDInterface()
-            if obd_interface.connect():
-                # Verify with data retrieval
-                test_data = obd_interface.get_data()
-                logger.info(f"OBD reinitialization successful")
-                return True
-            else:
-                logger.error("OBD reinitialization failed")
-        except Exception as e:
-            logger.error(f"Failed to reinitialize OBD: {str(e)}")
-            obd_interface = None
     
     return False
 
@@ -241,7 +191,7 @@ async def get_behavior_stats():
         return jsonify({'error': str(e)}), 500
 
 async def broadcast_sensor_data():
-    global current_session_id, mpu_sensor, obd_interface
+    global current_session_id, mpu_sensor
     
     # Start a new session
     try:
@@ -258,7 +208,6 @@ async def broadcast_sensor_data():
 
         try:
             sensor_data = None
-            obd_data = {}
             
             # Get MPU6050 data with improved error handling
             if mpu_sensor and mpu_sensor.is_initialized:
@@ -309,41 +258,11 @@ async def broadcast_sensor_data():
                 }
             
             # Get OBD data with improved error handling
-            raw_obd_data = {}
-            readable_obd_data = {}
-            if obd_interface and obd_interface.is_connected():
-                try:
-                    raw_obd_data = obd_interface.get_data()
-                    readable_obd_data = obd_interface.get_readable_data()
-                    if current_session_id:
-                        db_manager.store_obd_data(current_session_id, raw_obd_data)
-                except Exception as e:
-                    logger.error(f"Error getting OBD data: {str(e)}")
-                    success = await handle_hardware_error("OBD", e)
-                    if not success:
-                        # If recovery failed, update system health
-                        await update_system_health("hardware", f"OBD recovery failed: {str(e)}")
-                    # Use empty dictionary regardless of recovery success to keep the app running
-                    raw_obd_data = {}
-                    readable_obd_data = {}
-            else:
-                # No OBD interface available or not connected
-                if obd_interface and not obd_interface.is_connected():
-                    logger.warning("OBD interface is not connected, attempting to connect...")
-                    try:
-                        obd_interface.connect()
-                    except Exception as e:
-                        logger.error(f"Failed to connect to OBD: {str(e)}")
-                raw_obd_data = {}
-                readable_obd_data = {}
-            # Use the readable OBD data for frontend, with robust fallback
             try:
-                obd_data = readable_obd_data if hasattr(obd_interface, 'get_readable_data') else raw_obd_data
-                if not hasattr(obd_interface, 'get_readable_data'):
-                    logger.warning('OBDInterface is missing get_readable_data(). Using raw OBD data as fallback.')
+                obd_data = get_obd_data()
             except Exception as e:
-                logger.error(f'Error using get_readable_data: {str(e)}')
-                obd_data = raw_obd_data
+                logger.error(f'Error getting OBD data: {str(e)}')
+                obd_data = {}
 
             # Get behavior prediction with error handling
             try:
@@ -433,10 +352,6 @@ async def shutdown():
     try:
         if hasattr(app, 'broadcast_task'):
             app.broadcast_task.cancel()
-        if obd_interface:
-            obd_interface.disconnect()
-        if behavior_predictor:
-            behavior_predictor.stop()
         if current_session_id:
             db_manager.end_session(current_session_id)
         logger.info("Application shutdown completed")

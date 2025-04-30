@@ -2,143 +2,113 @@
 import asyncio
 import obd
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
-class OBDInterface:
-    def __init__(self):
-        self.connection = None
-        self.commands = [
-            obd.commands.SPEED,
-            obd.commands.RPM,
-            obd.commands.THROTTLE_POS,
-            obd.commands.ENGINE_LOAD,
-            obd.commands.COOLANT_TEMP,
-            obd.commands.CONTROL_MODULE_VOLTAGE,
-            obd.commands.FUEL_STATUS,
-            obd.commands.O2_SENSORS,
-            obd.commands.INTAKE_TEMP,
-            obd.commands.INTAKE_PRESSURE,
-            obd.commands.TIMING_ADVANCE,
-            obd.commands.BAROMETRIC_PRESSURE,
-            obd.commands.GET_DTC
-        ]
+# Set up the OBD connection globally
+connection = None
+watched_commands = [
+    obd.commands.SPEED,
+    obd.commands.RPM,
+    obd.commands.THROTTLE_POS,
+    obd.commands.ENGINE_LOAD,
+    obd.commands.COOLANT_TEMP,
+    obd.commands.CONTROL_MODULE_VOLTAGE,
+    obd.commands.FUEL_STATUS,
+    obd.commands.O2_SENSORS,
+    obd.commands.INTAKE_TEMP,
+    obd.commands.INTAKE_PRESSURE,
+    obd.commands.TIMING_ADVANCE,
+    obd.commands.BAROMETRIC_PRESSURE,
+    obd.commands.GET_DTC
+]
 
-    def connect(self):
-        """Establish connection to OBD-II adapter using async and watch commands"""
+def ensure_connection():
+    global connection
+    if connection is None or not connection.is_connected():
         try:
-            self.connection = obd.Async()
-            for cmd in self.commands:
-                self.connection.watch(cmd)
-            self.connection.start()
-            logger.info("OBD connection established successfully")
-            return True
+            logger.warning("OBD connection lost or not established. Attempting to reconnect...")
+            connection = obd.Async()
+            for cmd in watched_commands:
+                connection.watch(cmd)
+            connection.start()
+            # Give it a moment to connect
+            time.sleep(1)
+            if connection.is_connected():
+                logger.info("OBD connection re-established successfully.")
+            else:
+                logger.error("Failed to re-establish OBD connection.")
         except Exception as e:
-            logger.error(f"Failed to initialize OBD connection: {str(e)}")
-            self.connection = None
-            return False
+            logger.error(f"OBD reconnection failed: {str(e)}")
+            connection = None
 
-    def disconnect(self):
-        """Disconnect from OBD-II adapter"""
-        if self.connection:
-            self.connection.stop()
-            self.connection = None
+def calculate_o2_sensor_status(sensors):
+    if sensors is None:
+        return "Unknown (No sensors available)"
+    flat_sensors = [sensor for group in sensors for sensor in group] if any(isinstance(i, list) for i in sensors) else sensors
+    total_sensors = len(flat_sensors)
+    working_sensors = sum(flat_sensors)
+    if total_sensors == 0:
+        return "Unknown (No sensors available)"
+    percentage = (working_sensors / total_sensors) * 100
+    if percentage == 100:
+        status = "Excellent"
+    elif percentage >= 75:
+        status = "Good"
+    elif percentage >= 50:
+        status = "Fair"
+    elif percentage > 0:
+        status = "Poor"
+    else:
+        status = "Critical"
+    return f"{percentage:.0f}% - {status}"
 
-    def is_connected(self):
-        """Check if the connection is active"""
-        return self.connection is not None and self.connection.is_connected()
+def get_fuel_status_description(status):
+    if isinstance(status, tuple):
+        primary_status = status[0]
+    else:
+        primary_status = status
+    status_map = {
+        "": "No Data",
+        "Open loop due to insufficient engine temperature": "Cold Start",
+        "Closed loop, using oxygen sensor feedback to determine fuel mix": "Normal Operation",
+        "Open loop due to engine load OR fuel cut due to deceleration": "High Load",
+        "Open loop due to system failure": "System Failure",
+        "Closed loop, using at least one oxygen sensor but there is a fault in the feedback system": "Partial Feedback"
+    }
+    return status_map.get(primary_status, "Unknown Status")
 
-    def get_data(self):
-        """Get the latest data from all watched commands, using the value extraction technique from app.py"""
-        if not self.is_connected():
-            return {cmd.name: None for cmd in self.commands}
-        try:
-            data = {}
-            for cmd in self.commands:
-                response = self.connection.query(cmd)
-                # Handle special cases for value extraction
-                if response.value is not None:
-                    # For DTC, value is a list or None
-                    if cmd == obd.commands.GET_DTC:
-                        data[cmd.name] = response.value if response.value else 'No errors detected'
-                    # For O2_SENSORS, value may be a list
-                    elif cmd == obd.commands.O2_SENSORS:
-                        data[cmd.name] = response.value
-                    # For FUEL_STATUS, value may be a tuple
-                    elif cmd == obd.commands.FUEL_STATUS:
-                        data[cmd.name] = response.value
-                    # For all others, try to get magnitude
-                    else:
-                        try:
-                            data[cmd.name] = response.value.magnitude
-                        except Exception:
-                            data[cmd.name] = str(response.value)
+def get_obd_data():
+    ensure_connection()
+    if connection is None or not connection.is_connected():
+        logger.error("OBD is not connected. Returning error data.")
+        return {cmd.name: None for cmd in watched_commands} | {"error": "OBD connection not established"}
+    try:
+        data = {}
+        for cmd in watched_commands:
+            response = connection.query(cmd)
+            if response.is_null():
+                data[cmd.name] = None
+                continue
+            if response.value is not None:
+                if cmd == obd.commands.GET_DTC:
+                    data[cmd.name] = response.value if response.value else 'No errors detected'
+                elif cmd == obd.commands.O2_SENSORS:
+                    data[cmd.name] = calculate_o2_sensor_status(response.value)
+                elif cmd == obd.commands.FUEL_STATUS:
+                    data[cmd.name] = get_fuel_status_description(response.value)
                 else:
-                    data[cmd.name] = None
-            return data
-        except Exception as e:
-            logger.error(f"Error retrieving OBD data: {str(e)}")
-            return {cmd.name: None for cmd in self.commands}
-
-    @staticmethod
-    def get_fuel_status_description(status):
-        # Check if status is a tuple
-        if isinstance(status, tuple):
-            primary_status = status[0]  # Extract the first element
-        else:
-            primary_status = status  # Use as is if not a tuple
-
-        status_map = {
-            "": "No Data",
-            "Open loop due to insufficient engine temperature": "Cold Start",
-            "Closed loop, using oxygen sensor feedback to determine fuel mix": "Normal Operation",
-            "Open loop due to engine load OR fuel cut due to deceleration": "High Load",
-            "Open loop due to system failure": "System Failure",
-            "Closed loop, using at least one oxygen sensor but there is a fault in the feedback system": "Partial Feedback"
-        }
-        return status_map.get(primary_status, "Unknown Status")
-
-    @staticmethod
-    def calculate_o2_sensor_status(sensors):
-        if sensors is None:
-            return "Unknown (No sensors available)"
-        # Flatten the input in case it's a nested list
-        flat_sensors = [sensor for group in sensors for sensor in group] if any(isinstance(i, list) for i in sensors) else sensors
-        total_sensors = len(flat_sensors)
-        working_sensors = sum(flat_sensors)  # Count 'true' sensors
-        if total_sensors == 0:
-            return "Unknown (No sensors available)"
-        percentage = (working_sensors / total_sensors) * 100
-        if percentage == 100:
-            status = "Excellent"
-        elif percentage >= 75:
-            status = "Good"
-        elif percentage >= 50:
-            status = "Fair"
-        elif percentage > 0:
-            status = "Poor"
-        else:
-            status = "Critical"
-        return f"{percentage:.0f}% - {status}"
-
-    def get_readable_data(self):
-        """Return a dict with human-friendly OBD data for frontend or API use."""
-        raw = self.get_data()
-        return {
-            'speed': raw.get('SPEED'),
-            'rpm': raw.get('RPM'),
-            'throttle_position': raw.get('THROTTLE_POS'),
-            'engine_load': raw.get('ENGINE_LOAD'),
-            'coolant_temp': raw.get('COOLANT_TEMP'),
-            'control_module_voltage': raw.get('CONTROL_MODULE_VOLTAGE'),
-            'fuel_status': self.get_fuel_status_description(raw.get('FUEL_STATUS')) if raw.get('FUEL_STATUS') is not None else 'Unknown',
-            'o2_sensors': self.calculate_o2_sensor_status(raw.get('O2_SENSORS')) if raw.get('O2_SENSORS') is not None else 'Unknown',
-            'intake_temp': raw.get('INTAKE_TEMP'),
-            'intake_pressure': raw.get('INTAKE_PRESSURE'),
-            'timing_advance': raw.get('TIMING_ADVANCE'),
-            'barometric_pressure': raw.get('BAROMETRIC_PRESSURE'),
-            'obd_error_message': 'No errors detected' if not raw.get('GET_DTC') else raw.get('GET_DTC')
-        }
+                    try:
+                        data[cmd.name] = response.value.magnitude
+                    except Exception:
+                        data[cmd.name] = str(response.value)
+            else:
+                data[cmd.name] = None
+        return data
+    except Exception as e:
+        logger.error(f"Error retrieving OBD data: {str(e)}")
+        return {cmd.name: None for cmd in watched_commands} | {"error": str(e)}
 
 # Backward compatibility with the original async function
 async def get_obd_data():
