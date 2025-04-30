@@ -24,10 +24,12 @@ class WebSocketHandler {
 
     // Behavior tracking
     this.behaviorStats = {
-      normal: 0,
       aggressive_acceleration: 0,
-      aggressive_braking: 0,
-      aggressive_turning: 0,
+      normal_acceleration: 0,
+      aggressive_deceleration: 0,
+      normal_deceleration: 0,
+      aggressive_lane_change: 0,
+      normal_lane_change: 0,
       total: 0,
       recent_events: [],
     };
@@ -185,17 +187,23 @@ class WebSocketHandler {
       this.behaviorStats.total++;
 
       switch (behavior.event) {
-        case "normal_driving":
-          this.behaviorStats.normal++;
-          break;
         case "aggressive_acceleration":
           this.behaviorStats.aggressive_acceleration++;
           break;
-        case "aggressive_braking":
-          this.behaviorStats.aggressive_braking++;
+        case "normal_acceleration":
+          this.behaviorStats.normal_acceleration++;
           break;
-        case "aggressive_turning":
-          this.behaviorStats.aggressive_turning++;
+        case "aggressive_deceleration":
+          this.behaviorStats.aggressive_deceleration++;
+          break;
+        case "normal_deceleration":
+          this.behaviorStats.normal_deceleration++;
+          break;
+        case "aggressive_lane_change":
+          this.behaviorStats.aggressive_lane_change++;
+          break;
+        case "normal_lane_change":
+          this.behaviorStats.normal_lane_change++;
           break;
       }
 
@@ -203,32 +211,39 @@ class WebSocketHandler {
       this.updateBehaviorUI();
 
       // Update the behavior chart
-      const totalAggressive =
-        this.behaviorStats.aggressive_acceleration +
-        this.behaviorStats.aggressive_braking +
-        this.behaviorStats.aggressive_turning;
-
-      // Calculate percentages
-      const total = this.behaviorStats.normal + totalAggressive;
-      const normalPercentage =
-        total > 0 ? (this.behaviorStats.normal / total) * 100 : 100;
-      const aggressivePercentage =
-        total > 0 ? (totalAggressive / total) * 100 : 0;
-
-      console.log(
-        `Behavior distribution: Normal ${normalPercentage.toFixed(
-          1
-        )}%, Aggressive ${aggressivePercentage.toFixed(1)}%`
-      );
+      // Calculate percentages for each behavior
+      const total = this.behaviorStats.total;
+      const percentages = {
+        aggressive_acceleration:
+          total > 0
+            ? (this.behaviorStats.aggressive_acceleration / total) * 100
+            : 0,
+        normal_acceleration:
+          total > 0
+            ? (this.behaviorStats.normal_acceleration / total) * 100
+            : 0,
+        aggressive_deceleration:
+          total > 0
+            ? (this.behaviorStats.aggressive_deceleration / total) * 100
+            : 0,
+        normal_deceleration:
+          total > 0
+            ? (this.behaviorStats.normal_deceleration / total) * 100
+            : 0,
+        aggressive_lane_change:
+          total > 0
+            ? (this.behaviorStats.aggressive_lane_change / total) * 100
+            : 0,
+        normal_lane_change:
+          total > 0 ? (this.behaviorStats.normal_lane_change / total) * 100 : 0,
+      };
+      console.log("Behavior distribution:", percentages);
 
       if (
         window.charts &&
         typeof window.charts.updateBehaviorChart === "function"
       ) {
-        window.charts.updateBehaviorChart(
-          normalPercentage,
-          aggressivePercentage
-        );
+        window.charts.updateBehaviorChart(percentages);
       } else {
         console.warn(
           "Charts module or updateBehaviorChart function not available"
@@ -239,22 +254,22 @@ class WebSocketHandler {
 
   updateBehaviorUI() {
     // Update behavior counts
-    const normalCountElement = document.getElementById("normal-count");
-    const aggressiveCountElement = document.getElementById("aggressive-count");
+    const behaviorTypes = [
+      "aggressive_acceleration",
+      "normal_acceleration",
+      "aggressive_deceleration",
+      "normal_deceleration",
+      "aggressive_lane_change",
+      "normal_lane_change",
+    ];
+    behaviorTypes.forEach((type) => {
+      const el = document.getElementById(`${type}-count`);
+      if (el) {
+        el.textContent = this.behaviorStats[type];
+      }
+    });
 
-    if (normalCountElement) {
-      normalCountElement.textContent = this.behaviorStats.normal;
-    }
-
-    if (aggressiveCountElement) {
-      const totalAggressive =
-        this.behaviorStats.aggressive_acceleration +
-        this.behaviorStats.aggressive_braking +
-        this.behaviorStats.aggressive_turning;
-      aggressiveCountElement.textContent = totalAggressive;
-    }
-
-    // Update recent events list - Fix to use events-list ID instead of recent-events
+    // Update recent events list
     const eventsListElement = document.getElementById("events-list");
     if (eventsListElement) {
       eventsListElement.innerHTML = "";
@@ -277,17 +292,25 @@ class WebSocketHandler {
               eventClass = "aggressive";
               eventIcon = "🚀";
               break;
-            case "aggressive_braking":
+            case "normal_acceleration":
+              eventClass = "normal";
+              eventIcon = "✅";
+              break;
+            case "aggressive_deceleration":
               eventClass = "aggressive";
               eventIcon = "🛑";
               break;
-            case "aggressive_turning":
-              eventClass = "aggressive";
-              eventIcon = "↩️";
-              break;
-            case "normal_driving":
+            case "normal_deceleration":
               eventClass = "normal";
-              eventIcon = "✅";
+              eventIcon = "🟢";
+              break;
+            case "aggressive_lane_change":
+              eventClass = "aggressive";
+              eventIcon = "↔️";
+              break;
+            case "normal_lane_change":
+              eventClass = "normal";
+              eventIcon = "➡️";
               break;
           }
 

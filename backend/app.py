@@ -91,7 +91,7 @@ except Exception as e:
     obd_interface = None
 
 # Initialize behavior predictor
-model_path = os.path.join(os.path.dirname(__file__), 'model-1.h5')
+model_path = os.path.join(os.path.dirname(__file__), 'model-2.h5')
 if os.path.exists(model_path):
     logger.info(f"Behavior model file found at {model_path}, loading model.")
     behavior_predictor = BehaviorPredictor(model_path=model_path)
@@ -271,16 +271,27 @@ async def broadcast_sensor_data():
             if mpu_sensor and mpu_sensor.is_initialized:
                 try:
                     raw_sensor_data = mpu_sensor.get_data()
+                    # Calculate absolute acceleration and gyroscope if not present
+                    acc = raw_sensor_data['accelerometer']
+                    gyro = raw_sensor_data['gyroscope']
+                    abs_acc = acc.get('absolute')
+                    if abs_acc is None:
+                        abs_acc = (acc['x']**2 + acc['y']**2 + acc['z']**2) ** 0.5
+                    abs_gyro = gyro.get('absolute')
+                    if abs_gyro is None:
+                        abs_gyro = (gyro['x']**2 + gyro['y']**2 + gyro['z']**2) ** 0.5
                     sensor_data = {
                         'accelerometer': {
-                            'x': raw_sensor_data['accelerometer']['x'],
-                            'y': raw_sensor_data['accelerometer']['y'],
-                            'z': raw_sensor_data['accelerometer']['z']
+                            'x': acc['x'],
+                            'y': acc['y'],
+                            'z': acc['z'],
+                            'absolute': abs_acc
                         },
                         'gyroscope': {
-                            'x': raw_sensor_data['gyroscope']['x'],
-                            'y': raw_sensor_data['gyroscope']['y'], 
-                            'z': raw_sensor_data['gyroscope']['z']
+                            'x': gyro['x'],
+                            'y': gyro['y'],
+                            'z': gyro['z'],
+                            'absolute': abs_gyro
                         }
                     }
                     if current_session_id:
@@ -289,19 +300,27 @@ async def broadcast_sensor_data():
                             sensor_data['accelerometer'],
                             sensor_data['gyroscope']
                         )
+                    # Get speed from OBD data (in m/s)
+                    speed_kph = None
+                    if obd_interface and obd_interface.is_connected():
+                        try:
+                            raw_obd_data = obd_interface.get_data()
+                            speed_kph = raw_obd_data.get('SPEED')
+                        except Exception as e:
+                            logger.error(f"Error getting OBD data for speed: {str(e)}")
+                    speed_mps = speed_kph * 1000 / 3600 if speed_kph is not None else 0.0
                     # Add data to behavior predictor for real-time prediction
-                    behavior_predictor.add_data_point(sensor_data['accelerometer'], sensor_data['gyroscope'])
+                    behavior_predictor.add_data_point(sensor_data['accelerometer'], sensor_data['gyroscope'], speed_mps)
                 except Exception as e:
                     logger.error(f"Error getting MPU6050 data: {str(e)}")
                     success = await handle_hardware_error("MPU6050", e)
                     if not success:
                         # If recovery failed, update system health and use default values
                         await update_system_health("hardware", f"MPU6050 recovery failed: {str(e)}")
-                    
                     # Use default values regardless of recovery success to keep the app running
                     sensor_data = {
-                        'accelerometer': {'x': 0, 'y': 0, 'z': 0},
-                        'gyroscope': {'x': 0, 'y': 0, 'z': 0}
+                        'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0},
+                        'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
                     }
             else:
                 # No MPU sensor available or not initialized
@@ -311,10 +330,9 @@ async def broadcast_sensor_data():
                         mpu_sensor.connect(mpu_sensor.bus_number)
                     except Exception as e:
                         logger.error(f"Failed to initialize MPU6050: {str(e)}")
-                
                 sensor_data = {
-                    'accelerometer': {'x': 0, 'y': 0, 'z': 0},
-                    'gyroscope': {'x': 0, 'y': 0, 'z': 0}
+                    'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0},
+                    'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
                 }
             
             # Get OBD data with improved error handling

@@ -13,7 +13,7 @@ class BehaviorPredictor:
         self.data_buffer = deque(maxlen=sequence_length)
         self.lock = threading.Lock()
         self.latest_prediction = None
-        self.behaviors = ['normal_driving', 'aggressive_acceleration', 'aggressive_braking', 'aggressive_turning']
+        self.behaviors = ['aggressive_acceleration', 'normal_acceleration', 'aggressive_deceleration', 'normal_deceleration', 'aggressive_lane_change', 'normal_lane_change']
         self.model = None
         # Require model_path and load model
         if not model_path:
@@ -36,14 +36,20 @@ class BehaviorPredictor:
             logger.error(f"Failed to start prediction thread: {str(e)}")
             self.running = False
 
-    def add_data_point(self, accel_data, gyro_data):
+    def add_data_point(self, accel_data, gyro_data, speed):
+        # Compose the 9-feature input vector
+        abs_acc = accel_data.get('absolute')
+        abs_gyro = gyro_data.get('absolute')
         data_point = [
             accel_data['x'], accel_data['y'], accel_data['z'],
-            gyro_data['x'], gyro_data['y'], gyro_data['z']
+            abs_acc,
+            gyro_data['x'], gyro_data['y'], gyro_data['z'],
+            abs_gyro,
+            speed
         ]
         with self.lock:
             self.data_buffer.append(data_point)
-            logger.debug(f"Added data point to buffer. Buffer size: {len(self.data_buffer)}/{self.sequence_length}")
+            logger.debug(f"Added data point to buffer: {data_point}. Buffer size: {len(self.data_buffer)}/{self.sequence_length}")
 
     def _prediction_loop(self):
         while self.running:
@@ -55,6 +61,7 @@ class BehaviorPredictor:
                 if len(self.data_buffer) >= self.sequence_length:
                     with self.lock:
                         data = np.array(list(self.data_buffer))
+                        logger.debug(f"Prediction input array shape: {data.shape}")
                         mean = np.mean(data, axis=0)
                         std = np.std(data, axis=0)
                         data = (data - mean) / (std + 1e-7)
