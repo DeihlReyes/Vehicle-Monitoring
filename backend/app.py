@@ -96,8 +96,8 @@ if os.path.exists(model_path):
     logger.info(f"Behavior model file found at {model_path}, loading model.")
     behavior_predictor = BehaviorPredictor(model_path=model_path)
 else:
-    logger.warning(f"Behavior model file not found at {model_path}, using untrained model.")
-    behavior_predictor = BehaviorPredictor()
+    logger.error(f"Behavior model file not found at {model_path}. Cannot start BehaviorPredictor.")
+    raise FileNotFoundError(f"Behavior model file not found at {model_path}")
 
 # Store connected WebSocket clients
 connected_clients = set()
@@ -289,6 +289,8 @@ async def broadcast_sensor_data():
                             sensor_data['accelerometer'],
                             sensor_data['gyroscope']
                         )
+                    # Add data to behavior predictor for real-time prediction
+                    behavior_predictor.add_data_point(sensor_data['accelerometer'], sensor_data['gyroscope'])
                 except Exception as e:
                     logger.error(f"Error getting MPU6050 data: {str(e)}")
                     success = await handle_hardware_error("MPU6050", e)
