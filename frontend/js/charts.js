@@ -96,14 +96,14 @@ function initBehaviorChart() {
     // Layout settings for pie chart
     const layout = {
       autosize: true,
-      width: 320,
-      height: 320,
+      width: undefined, // Let it be responsive
+      height: undefined, // Let it be responsive
       margin: { l: 50, r: 50, t: 30, b: 30, pad: 4 },
       showlegend: true,
       legend: {
         orientation: "h",
         xanchor: "center",
-        y: -0.2,
+        y: -0.15,
         x: 0.5,
       },
       paper_bgcolor: "rgba(0,0,0,0)",
@@ -165,6 +165,8 @@ function initAccelerometerChart() {
     const layout = {
       ...commonLayout,
       title: "Accelerometer Data",
+      autosize: true,
+      height: 400,
       xaxis: {
         title: "Time",
         showgrid: true,
@@ -241,6 +243,8 @@ function initGyroscopeChart() {
     const layout = {
       ...commonLayout,
       title: "Gyroscope Data",
+      autosize: true,
+      height: 400,
       xaxis: {
         title: "Time",
         showgrid: true,
