@@ -60,13 +60,20 @@ class OBDInterface:
         """Get the latest data from all watched commands"""
         if not self.is_connected():
             return {cmd.name: None for cmd in self.commands}
-            
         try:
             data = {}
             for cmd in self.commands:
                 response = self.connection.query(cmd)
-                if response.value is not None:
-                    data[cmd.name] = response.value.magnitude
+                value = response.value
+                if value is not None:
+                    # Handle value types
+                    if hasattr(value, 'magnitude'):
+                        data[cmd.name] = value.magnitude
+                    elif isinstance(value, tuple):
+                        # Store tuple as string or extract first element if appropriate
+                        data[cmd.name] = str(value)
+                    else:
+                        data[cmd.name] = value
                 else:
                     data[cmd.name] = None
             return data
