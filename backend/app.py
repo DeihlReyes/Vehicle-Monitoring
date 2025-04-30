@@ -311,10 +311,11 @@ async def broadcast_sensor_data():
             
             # Get OBD data with improved error handling
             raw_obd_data = {}
+            readable_obd_data = {}
             if obd_interface and obd_interface.is_connected():
                 try:
                     raw_obd_data = obd_interface.get_data()
-                    
+                    readable_obd_data = obd_interface.get_readable_data()
                     if current_session_id:
                         db_manager.store_obd_data(current_session_id, raw_obd_data)
                 except Exception as e:
@@ -323,9 +324,9 @@ async def broadcast_sensor_data():
                     if not success:
                         # If recovery failed, update system health
                         await update_system_health("hardware", f"OBD recovery failed: {str(e)}")
-                    
                     # Use empty dictionary regardless of recovery success to keep the app running
                     raw_obd_data = {}
+                    readable_obd_data = {}
             else:
                 # No OBD interface available or not connected
                 if obd_interface and not obd_interface.is_connected():
@@ -334,19 +335,10 @@ async def broadcast_sensor_data():
                         obd_interface.connect()
                     except Exception as e:
                         logger.error(f"Failed to connect to OBD: {str(e)}")
-                
                 raw_obd_data = {}
-            
-            # Format OBD data for frontend
-            obd_data = {
-                'rpm': raw_obd_data.get('RPM'),
-                'speed': raw_obd_data.get('SPEED'),
-                'throttle': raw_obd_data.get('THROTTLE_POS'),
-                'engineLoad': raw_obd_data.get('ENGINE_LOAD'),
-                'coolant': raw_obd_data.get('COOLANT_TEMP'),
-                'battery': raw_obd_data.get('CONTROL_MODULE_VOLTAGE'),
-                'intake': raw_obd_data.get('INTAKE_PRESSURE')
-            }
+                readable_obd_data = {}
+            # Use the readable OBD data for frontend
+            obd_data = readable_obd_data
 
             # Get behavior prediction with error handling
             try:

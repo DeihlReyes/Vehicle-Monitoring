@@ -17,56 +17,62 @@ class OBDInterface:
             obd.commands.CONTROL_MODULE_VOLTAGE,
             obd.commands.FUEL_STATUS,
             obd.commands.O2_SENSORS,
+            obd.commands.INTAKE_TEMP,
             obd.commands.INTAKE_PRESSURE,
-            obd.commands.TIMING_ADVANCE
+            obd.commands.TIMING_ADVANCE,
+            obd.commands.BAROMETRIC_PRESSURE,
+            obd.commands.GET_DTC
         ]
-        
+
     def connect(self):
-        """Establish connection to OBD-II adapter"""
+        """Establish connection to OBD-II adapter using async and watch commands"""
         try:
             self.connection = obd.Async()
-            
-            # Watch each command individually
-            self.connection.watch(obd.commands.SPEED)
-            self.connection.watch(obd.commands.RPM)
-            self.connection.watch(obd.commands.THROTTLE_POS)
-            self.connection.watch(obd.commands.ENGINE_LOAD)
-            self.connection.watch(obd.commands.COOLANT_TEMP)
-            self.connection.watch(obd.commands.CONTROL_MODULE_VOLTAGE)
-            self.connection.watch(obd.commands.FUEL_STATUS)
-            self.connection.watch(obd.commands.O2_SENSORS)
-            self.connection.watch(obd.commands.INTAKE_PRESSURE)
-            self.connection.watch(obd.commands.TIMING_ADVANCE)
-            
-            # Start the connection
+            for cmd in self.commands:
+                self.connection.watch(cmd)
             self.connection.start()
             logger.info("OBD connection established successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize OBD connection: {str(e)}")
+            self.connection = None
             return False
-            
+
     def disconnect(self):
         """Disconnect from OBD-II adapter"""
         if self.connection:
             self.connection.stop()
             self.connection = None
-            
+
     def is_connected(self):
         """Check if the connection is active"""
         return self.connection is not None and self.connection.is_connected()
-            
+
     def get_data(self):
-        """Get the latest data from all watched commands"""
+        """Get the latest data from all watched commands, using the value extraction technique from app.py"""
         if not self.is_connected():
             return {cmd.name: None for cmd in self.commands}
-            
         try:
             data = {}
             for cmd in self.commands:
                 response = self.connection.query(cmd)
+                # Handle special cases for value extraction
                 if response.value is not None:
-                    data[cmd.name] = response.value.magnitude
+                    # For DTC, value is a list or None
+                    if cmd == obd.commands.GET_DTC:
+                        data[cmd.name] = response.value if response.value else 'No errors detected'
+                    # For O2_SENSORS, value may be a list
+                    elif cmd == obd.commands.O2_SENSORS:
+                        data[cmd.name] = response.value
+                    # For FUEL_STATUS, value may be a tuple
+                    elif cmd == obd.commands.FUEL_STATUS:
+                        data[cmd.name] = response.value
+                    # For all others, try to get magnitude
+                    else:
+                        try:
+                            data[cmd.name] = response.value.magnitude
+                        except Exception:
+                            data[cmd.name] = str(response.value)
                 else:
                     data[cmd.name] = None
             return data
