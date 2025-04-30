@@ -183,10 +183,12 @@ class WebSocketHandler {
         this.behaviorStats.recent_events.pop();
       }
 
-      // Update counts based on the event type
-      this.behaviorStats.total++;
-      if (this.behaviorStats[behavior.event] !== undefined) {
-        this.behaviorStats[behavior.event]++;
+      // Update counts based on the event type (skip for rider_stopped)
+      if (behavior.event !== "rider_stopped") {
+        this.behaviorStats.total++;
+        if (this.behaviorStats[behavior.event] !== undefined) {
+          this.behaviorStats[behavior.event]++;
+        }
       }
 
       // Update the current behavior display in the OBD tab
@@ -202,7 +204,7 @@ class WebSocketHandler {
       // Update UI
       this.updateBehaviorUI();
 
-      // Calculate percentages for behavior chart
+      // Calculate percentages for behavior chart (excluding rider_stopped)
       const total = this.behaviorStats.total || 1; // Avoid division by zero
       const percentages = {
         aggressive_acceleration:

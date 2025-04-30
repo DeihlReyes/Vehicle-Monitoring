@@ -37,6 +37,16 @@ class BehaviorPredictor:
             self.running = False
 
     def add_data_point(self, accel_data, gyro_data, speed):
+        # Don't add data point if speed is 0
+        if speed == 0:
+            with self.lock:
+                self.latest_prediction = {
+                    'behavior': 'rider_stopped',
+                    'confidence': 1.0,
+                    'timestamp': time.time()
+                }
+            return
+
         # Compose the 9-feature input vector
         abs_acc = accel_data.get('absolute')
         abs_gyro = gyro_data.get('absolute')
