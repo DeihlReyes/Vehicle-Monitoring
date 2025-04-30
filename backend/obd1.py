@@ -1,6 +1,6 @@
 # obd.py
 import asyncio
-import backend.obd1 as obd1
+import obd
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,25 +9,25 @@ class OBDInterface:
     def __init__(self):
         self.connection = None
         self.commands = [
-            obd1.commands.SPEED,
-            obd1.commands.RPM,
-            obd1.commands.THROTTLE_POS,
-            obd1.commands.ENGINE_LOAD,
-            obd1.commands.COOLANT_TEMP,
-            obd1.commands.CONTROL_MODULE_VOLTAGE,
-            obd1.commands.FUEL_STATUS,
-            obd1.commands.O2_SENSORS,
-            obd1.commands.INTAKE_TEMP,
-            obd1.commands.INTAKE_PRESSURE,
-            obd1.commands.TIMING_ADVANCE,
-            obd1.commands.BAROMETRIC_PRESSURE,
-            obd1.commands.GET_DTC
+            obd.commands.SPEED,
+            obd.commands.RPM,
+            obd.commands.THROTTLE_POS,
+            obd.commands.ENGINE_LOAD,
+            obd.commands.COOLANT_TEMP,
+            obd.commands.CONTROL_MODULE_VOLTAGE,
+            obd.commands.FUEL_STATUS,
+            obd.commands.O2_SENSORS,
+            obd.commands.INTAKE_TEMP,
+            obd.commands.INTAKE_PRESSURE,
+            obd.commands.TIMING_ADVANCE,
+            obd.commands.BAROMETRIC_PRESSURE,
+            obd.commands.GET_DTC
         ]
 
     def connect(self):
         """Establish connection to OBD-II adapter using async and watch commands"""
         try:
-            self.connection = obd1.Async()
+            self.connection = obd.Async()
             for cmd in self.commands:
                 self.connection.watch(cmd)
             self.connection.start()
@@ -59,13 +59,13 @@ class OBDInterface:
                 # Handle special cases for value extraction
                 if response.value is not None:
                     # For DTC, value is a list or None
-                    if cmd == obd1.commands.GET_DTC:
+                    if cmd == obd.commands.GET_DTC:
                         data[cmd.name] = response.value if response.value else 'No errors detected'
                     # For O2_SENSORS, value may be a list
-                    elif cmd == obd1.commands.O2_SENSORS:
+                    elif cmd == obd.commands.O2_SENSORS:
                         data[cmd.name] = response.value
                     # For FUEL_STATUS, value may be a tuple
-                    elif cmd == obd1.commands.FUEL_STATUS:
+                    elif cmd == obd.commands.FUEL_STATUS:
                         data[cmd.name] = response.value
                     # For all others, try to get magnitude
                     else:
@@ -143,15 +143,15 @@ class OBDInterface:
 # Backward compatibility with the original async function
 async def get_obd_data():
     """Legacy function for backward compatibility"""
-    connection = obd1.OBD()
+    connection = obd.OBD()
     commands = [
-        obd1.commands.SPEED,
-        obd1.commands.RPM,
-        obd1.commands.THROTTLE_POS,
-        obd1.commands.ENGINE_LOAD,
-        obd1.commands.COOLANT_TEMP,
-        obd1.commands.INTAKE_TEMP,
-        obd1.commands.FUEL_STATUS
+        obd.commands.SPEED,
+        obd.commands.RPM,
+        obd.commands.THROTTLE_POS,
+        obd.commands.ENGINE_LOAD,
+        obd.commands.COOLANT_TEMP,
+        obd.commands.INTAKE_TEMP,
+        obd.commands.FUEL_STATUS
     ]
     
     async def fetch_data(command):

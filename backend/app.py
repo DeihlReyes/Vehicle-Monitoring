@@ -2,7 +2,6 @@ from quart import Quart, websocket, jsonify
 import asyncio
 import json
 from datetime import datetime
-import backend.obd1 as obd1
 from mpu6050 import MPU6050
 from behavior_model import BehaviorPredictor
 from database import DatabaseManager
