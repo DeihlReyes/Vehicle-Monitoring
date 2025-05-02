@@ -89,41 +89,37 @@
       <!-- OBD Info Tab -->
       <div class="tab-content hidden" id="obd-tab">
         <div class="obd-grid">
-          <div class="obd-card" id="engine-metrics">
-            <h3>Engine Metrics</h3>
-            <div class="metric">
-              <span>RPM</span>
-              <span id="rpm-value">0</span>
-            </div>
-            <div class="metric">
-              <span>Speed</span>
-              <span id="speed-value">0 km/h</span>
-            </div>
-            <div class="metric">
-              <span>Throttle</span>
-              <span id="throttle-value">0%</span>
-            </div>
+          <!-- Primary Metrics -->
+          <div class="obd-card primary-metric" id="speed-card">
+            <h3>Speed</h3>
+            <div class="metric-value" id="speed-value">0 km/h</div>
           </div>
-          <div class="obd-card" id="temperature-metrics">
-            <h3>Temperature</h3>
-            <div class="metric">
-              <span>Coolant</span>
-              <span id="coolant-temp">0°C</span>
-            </div>
-            <div class="metric">
-              <span>Intake</span>
-              <span id="intake-temp">0°C</span>
-            </div>
+          <div class="obd-card primary-metric" id="rpm-card">
+            <h3>RPM</h3>
+            <div class="metric-value" id="rpm-value">0</div>
           </div>
-          <div class="obd-card" id="system-metrics">
-            <h3>System Status</h3>
-            <div class="metric">
-              <span>Battery</span>
-              <span id="battery-voltage">0V</span>
+
+          <!-- Secondary Metrics Grid -->
+          <div class="secondary-metrics-grid">
+            <div class="obd-card compact">
+              <span class="metric-label">Throttle</span>
+              <span class="metric-value" id="throttle-value">0%</span>
             </div>
-            <div class="metric">
-              <span>Engine Load</span>
-              <span id="engine-load">0%</span>
+            <div class="obd-card compact">
+              <span class="metric-label">Engine Load</span>
+              <span class="metric-value" id="engine-load">0%</span>
+            </div>
+            <div class="obd-card compact">
+              <span class="metric-label">Coolant</span>
+              <span class="metric-value" id="coolant-temp">0°C</span>
+            </div>
+            <div class="obd-card compact">
+              <span class="metric-label">Intake</span>
+              <span class="metric-value" id="intake-temp">0 kPa</span>
+            </div>
+            <div class="obd-card compact">
+              <span class="metric-label">Battery</span>
+              <span class="metric-value" id="battery-voltage">0V</span>
             </div>
           </div>
         </div>

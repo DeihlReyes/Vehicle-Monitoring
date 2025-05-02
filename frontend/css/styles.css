@@ -138,10 +138,41 @@ body {
 
 /* OBD Info Styles */
 .obd-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  height: 100%;
+  padding: 0 1rem;
+  padding-top: 0.5rem; /* Reduced top padding */
+  height: calc(100vh - 60px); /* Account for bottom nav */
+  max-width: 1300px;
+  margin: 0 auto;
+}
+
+.primary-metric {
+  text-align: center;
+  padding: 1rem !important; /* Reduced padding */
+  flex-shrink: 0; /* Prevent primary metrics from shrinking */
+}
+
+.primary-metric h3 {
+  font-size: 1.2rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.primary-metric .metric-value {
+  font-size: 3rem;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.secondary-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  flex: 1; /* Take up remaining space */
+  min-height: 0; /* Allow proper flex sizing */
+  align-content: space-evenly; /* Distribute space evenly */
 }
 
 .obd-card {
@@ -151,25 +182,53 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.metric {
+.obd-card.compact {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  justify-content: space-evenly;
   align-items: center;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #eee;
+  padding: 1rem; /* Increased padding */
+  min-height: 100px; /* Set minimum height */
 }
 
-.metric:last-child {
-  border-bottom: none;
-}
-
-.metric span:first-child {
+.metric-label {
   color: #666;
+  font-size: 1.1rem; /* Slightly larger font */
 }
 
-.metric span:last-child {
+.metric-value {
   font-weight: bold;
   color: #2c3e50;
+  font-size: 1.4rem; /* Larger font size */
+}
+
+/* Media Queries for OBD Layout */
+@media (min-width: 768px) {
+  .obd-grid {
+    padding: 0.5rem 2rem; /* Keep reduced top padding but wider side padding */
+  }
+
+  .primary-metric .metric-value {
+    font-size: 4rem;
+  }
+
+  .secondary-metrics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .obd-card.compact {
+    min-height: 120px; /* Larger on tablets */
+  }
+}
+
+@media (min-width: 1024px) {
+  .secondary-metrics-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .obd-card.compact {
+    min-height: 140px; /* Even larger on desktop */
+  }
 }
 
 /* Bottom Navigation */
