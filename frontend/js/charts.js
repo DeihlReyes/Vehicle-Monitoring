@@ -440,40 +440,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeCharts();
 });
 
-// Set accelerometer chart data from arrays
-function setAccelerometerChartData(xArr, yArr, zArr, timeArr) {
-  accelerometerData.x = xArr.slice(-20);
-  accelerometerData.y = yArr.slice(-20);
-  accelerometerData.z = zArr.slice(-20);
-  accelerometerData.time = timeArr.slice(-20);
-  if (chartsInitialized) {
-    const update = {
-      x: [
-        accelerometerData.time,
-        accelerometerData.time,
-        accelerometerData.time,
-      ],
-      y: [accelerometerData.x, accelerometerData.y, accelerometerData.z],
-    };
-    Plotly.update("accelerometer-chart", update);
-  }
-}
-
-// Set gyroscope chart data from arrays
-function setGyroscopeChartData(xArr, yArr, zArr, timeArr) {
-  gyroscopeData.x = xArr.slice(-20);
-  gyroscopeData.y = yArr.slice(-20);
-  gyroscopeData.z = zArr.slice(-20);
-  gyroscopeData.time = timeArr.slice(-20);
-  if (chartsInitialized) {
-    const update = {
-      x: [gyroscopeData.time, gyroscopeData.time, gyroscopeData.time],
-      y: [gyroscopeData.x, gyroscopeData.y, gyroscopeData.z],
-    };
-    Plotly.update("gyroscope-chart", update);
-  }
-}
-
 // Export chart update functions
 window.charts = {
   initializeCharts,
@@ -481,6 +447,4 @@ window.charts = {
   updateAccelerometerChart,
   updateGyroscopeChart,
   handleResize,
-  setAccelerometerChartData,
-  setGyroscopeChartData,
 };
