@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BehaviorPredictor:
-    def __init__(self, model_path=None, sequence_length=50):
+    def __init__(self, model_path=None, sequence_length=10):
         self.sequence_length = sequence_length
         self.data_buffer = deque(maxlen=sequence_length)
         self.lock = threading.Lock()
