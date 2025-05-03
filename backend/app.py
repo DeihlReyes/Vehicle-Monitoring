@@ -250,15 +250,95 @@ async def get_behavior_stats():
         logger.error(f"Failed to get behavior statistics: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/sessions/current/latest_data')
+async def get_current_session_latest_data():
+    """Return the latest sensor, OBD, and behavior data for the current open session."""
+    try:
+        # Find the current open session
+        session = db_manager.get_last_open_session()
+        if not session:
+            return jsonify({
+                'timestamp': datetime.now().isoformat(),
+                'sensor_data': {'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}, 'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}},
+                'obd_data': {},
+                'behavior': {'event': 'normal_driving', 'confidence': 0.95, 'timestamp': datetime.now().timestamp()},
+                'system_health': {
+                    'status': system_health.status.value,
+                    'mpu_sensor_ok': system_health.mpu_sensor_ok,
+                    'obd_connection_ok': system_health.obd_connection_ok,
+                    'error_counts': system_health.error_count,
+                    'last_error': system_health.last_error
+                },
+                'session_id': None,
+                'session_start_time': None
+            })
+        # Get latest sensor data
+        with db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM sensor_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
+            sensor_row = cursor.fetchone()
+            if sensor_row:
+                accelerometer = json.loads(sensor_row['accelerometer_data'])
+                gyroscope = json.loads(sensor_row['gyroscope_data'])
+            else:
+                accelerometer = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
+                gyroscope = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
+            cursor.execute("SELECT * FROM obd_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
+            obd_row = cursor.fetchone()
+            if obd_row:
+                obd_data = {
+                    'rpm': obd_row['rpm'],
+                    'speed': obd_row['speed'],
+                    'throttle': obd_row['throttle_position'],
+                    'engineLoad': obd_row['engine_load'],
+                    'coolant': obd_row['coolant_temp'],
+                    'battery': obd_row['voltage'],
+                }
+            else:
+                obd_data = {}
+            cursor.execute("SELECT * FROM behavior_events WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
+            behavior_row = cursor.fetchone()
+            if behavior_row:
+                behavior = {
+                    'event': behavior_row['behavior_type'],
+                    'confidence': behavior_row['confidence'] if behavior_row['confidence'] is not None else 0.95,
+                    'timestamp': datetime.fromisoformat(behavior_row['timestamp']).timestamp() if behavior_row['timestamp'] else datetime.now().timestamp()
+                }
+            else:
+                behavior = {'event': 'normal_driving', 'confidence': 0.95, 'timestamp': datetime.now().timestamp()}
+        return jsonify({
+            'timestamp': datetime.now().isoformat(),
+            'sensor_data': {'accelerometer': accelerometer, 'gyroscope': gyroscope},
+            'obd_data': obd_data,
+            'behavior': behavior,
+            'system_health': {
+                'status': system_health.status.value,
+                'mpu_sensor_ok': system_health.mpu_sensor_ok,
+                'obd_connection_ok': system_health.obd_connection_ok,
+                'error_counts': system_health.error_count,
+                'last_error': system_health.last_error
+            },
+            'session_id': session.id,
+            'session_start_time': session.start_time.isoformat() if session.start_time else None
+        })
+    except Exception as e:
+        logger.error(f"Failed to get latest data for current session: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 async def broadcast_sensor_data():
     global current_session_id, mpu_sensor, obd_interface
     
-    # Start a new session
+    # Resume last open session or start a new one
     try:
-        current_session_id = db_manager.start_new_session()
-        logger.info(f"Started new riding session with ID: {current_session_id}")
+        last_open_session = db_manager.get_last_open_session()
+        if last_open_session:
+            current_session_id = last_open_session.id
+            logger.info(f"Resumed open riding session with ID: {current_session_id}")
+        else:
+            current_session_id = db_manager.start_new_session()
+            logger.info(f"Started new riding session with ID: {current_session_id}")
     except Exception as e:
-        logger.error(f"Failed to start new session: {str(e)}")
+        logger.error(f"Failed to start or resume session: {str(e)}")
         current_session_id = None
 
     while True:

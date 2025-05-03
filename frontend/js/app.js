@@ -186,6 +186,14 @@ class App {
 
   async loadInitialData() {
     try {
+      // Load latest data for current session and update dashboard immediately
+      const latestDataResponse = await fetch("/sessions/current/latest_data");
+      if (latestDataResponse.ok) {
+        const latestData = await latestDataResponse.json();
+        if (latestData && latestData.sensor_data) {
+          this.updateRealTimeData(latestData);
+        }
+      }
       // Load recent sessions
       const sessionsResponse = await fetch("/sessions/recent");
       const sessions = await sessionsResponse.json();

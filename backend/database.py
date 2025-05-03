@@ -333,4 +333,27 @@ class DatabaseManager:
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             logger.error(f"Failed to fetch logs: {str(e)}")
-            return [] 
+            return []
+
+    def get_last_open_session(self) -> Optional[RidingSession]:
+        """Return the most recent open (not ended) session, or None if all are ended."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM riding_sessions WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1"
+                )
+                row = cursor.fetchone()
+                if row:
+                    return RidingSession(
+                        id=row['id'],
+                        start_time=datetime.fromisoformat(row['start_time']),
+                        end_time=None,
+                        total_aggressive_events=row['total_aggressive_events'],
+                        average_speed=row['average_speed'],
+                        max_speed=row['max_speed']
+                    )
+                return None
+        except Exception as e:
+            logger.error(f"Failed to get last open session: {str(e)}")
+            return None 
