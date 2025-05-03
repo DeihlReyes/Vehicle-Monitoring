@@ -22,10 +22,12 @@ class DatabaseManager:
         self.initialize_database()
 
     def get_connection(self):
-        """Create a database connection with error handling"""
+        """Create a database connection with error handling, WAL mode, and higher timeout"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self.db_path, timeout=30)
             conn.row_factory = sqlite3.Row  # Enable row factory for named columns
+            # Enable WAL mode for better concurrency
+            conn.execute("PRAGMA journal_mode=WAL;")
             return conn
         except Exception as e:
             logger.error(f"Failed to connect to database: {str(e)}")

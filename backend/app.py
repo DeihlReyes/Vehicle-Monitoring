@@ -341,6 +341,7 @@ async def broadcast_sensor_data():
         logger.error(f"Failed to start or resume session: {str(e)}")
         current_session_id = None
 
+    last_behavior_event = None
     while True:
         if not connected_clients:
             await asyncio.sleep(0.1)
@@ -494,17 +495,24 @@ async def broadcast_sensor_data():
                 }
             }
 
-            # Broadcast to all connected clients
-            disconnected_clients = set()
-            for client in connected_clients:
-                try:
-                    await client.send(json.dumps(data))
-                except Exception as e:
-                    logger.error(f"Error sending to client: {str(e)}")
-                    disconnected_clients.add(client)
-            
-            # Remove disconnected clients
-            connected_clients.difference_update(disconnected_clients)
+            # Only broadcast if behavior is not 'rider_stopped', or if the last event was not 'rider_stopped'
+            should_broadcast = False
+            if behavior['event'] != 'rider_stopped':
+                should_broadcast = True
+            elif last_behavior_event != 'rider_stopped':
+                should_broadcast = True
+            # else: suppress repeated 'rider_stopped' broadcasts
+
+            if should_broadcast:
+                disconnected_clients = set()
+                for client in connected_clients:
+                    try:
+                        await client.send(json.dumps(data))
+                    except Exception as e:
+                        logger.error(f"Error sending to client: {str(e)}")
+                        disconnected_clients.add(client)
+                connected_clients.difference_update(disconnected_clients)
+                last_behavior_event = behavior['event']
 
         except Exception as e:
             logger.error(f"Critical error in broadcast loop: {str(e)}")
