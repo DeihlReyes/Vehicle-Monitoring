@@ -259,7 +259,8 @@ async def get_current_session_latest_data():
         # Find the current open session
         session = db_manager.get_last_open_session()
         if not session:
-            return jsonify({
+            logger.debug("No open session found for latest_data.")
+            data = {
                 'timestamp': datetime.now().isoformat(),
                 'sensor_data': {'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}, 'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}},
                 'obd_data': {},
@@ -273,7 +274,9 @@ async def get_current_session_latest_data():
                 },
                 'session_id': None,
                 'session_start_time': None
-            })
+            }
+            logger.debug(f"latest_data response (no session): {data}")
+            return jsonify(data)
         # Get latest sensor data
         with db_manager.get_connection() as conn:
             cursor = conn.cursor()
@@ -308,7 +311,7 @@ async def get_current_session_latest_data():
                 }
             else:
                 behavior = {'event': 'normal_driving', 'confidence': 0.95, 'timestamp': datetime.now().timestamp()}
-        return jsonify({
+        data = {
             'timestamp': datetime.now().isoformat(),
             'sensor_data': {'accelerometer': accelerometer, 'gyroscope': gyroscope},
             'obd_data': obd_data,
@@ -322,7 +325,9 @@ async def get_current_session_latest_data():
             },
             'session_id': session.id,
             'session_start_time': session.start_time.isoformat() if session.start_time else None
-        })
+        }
+        logger.debug(f"latest_data response for session {session.id}: {data}")
+        return jsonify(data)
     except Exception as e:
         logger.error(f"Failed to get latest data for current session: {str(e)}")
         return jsonify({'error': str(e)}), 500
