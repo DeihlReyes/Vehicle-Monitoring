@@ -331,6 +331,7 @@ async def get_current_session_behavior_summary():
     try:
         session = db_manager.get_last_open_session()
         if not session:
+            logger.debug("No open session found for behavior summary.")
             # Return zeros for all behaviors if no open session
             return jsonify({
                 'aggressive_acceleration': 0,
@@ -340,6 +341,7 @@ async def get_current_session_behavior_summary():
                 'aggressive_lane_change': 0,
                 'normal_lane_change': 0
             })
+        logger.debug(f"Querying behavior summary for session ID: {session.id}")
         with db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -360,25 +362,34 @@ async def get_current_session_behavior_summary():
             for row in rows:
                 if row['behavior_type'] in summary:
                     summary[row['behavior_type']] = row['count']
+        logger.debug(f"Behavior summary for session {session.id}: {summary}")
         return jsonify(summary)
     except Exception as e:
         logger.error(f"Failed to get behavior summary for current session: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+def get_or_create_singleton_session():
+    """Always use the first session ever created, or create one if none exists."""
+    with db_manager.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM riding_sessions ORDER BY id ASC LIMIT 1")
+        row = cursor.fetchone()
+        if row:
+            return row['id']
+        # No session exists, create one
+        cursor.execute("INSERT INTO riding_sessions (start_time) VALUES (?)", (datetime.now(),))
+        conn.commit()
+        return cursor.lastrowid
+
 async def broadcast_sensor_data():
     global current_session_id, mpu_sensor, obd_interface
     
-    # Resume last open session or start a new one
+    # Always use the singleton session
     try:
-        last_open_session = db_manager.get_last_open_session()
-        if last_open_session:
-            current_session_id = last_open_session.id
-            logger.info(f"Resumed open riding session with ID: {current_session_id}")
-        else:
-            current_session_id = db_manager.start_new_session()
-            logger.info(f"Started new riding session with ID: {current_session_id}")
+        current_session_id = get_or_create_singleton_session()
+        logger.info(f"Using singleton session with ID: {current_session_id}")
     except Exception as e:
-        logger.error(f"Failed to start or resume session: {str(e)}")
+        logger.error(f"Failed to get or create singleton session: {str(e)}")
         current_session_id = None
 
     last_behavior_event = None
@@ -589,7 +600,7 @@ async def startup():
 
 @app.after_serving
 async def shutdown():
-    """Cleanup with error handling"""
+    """Cleanup with error handling (no session ending)."""
     try:
         if hasattr(app, 'broadcast_task'):
             app.broadcast_task.cancel()
@@ -597,8 +608,6 @@ async def shutdown():
             obd_interface.disconnect()
         if behavior_predictor:
             behavior_predictor.stop()
-        if current_session_id:
-            db_manager.end_session(current_session_id)
         logger.info("Application shutdown completed")
     except Exception as e:
         logger.error(f"Error during shutdown: {str(e)}")
