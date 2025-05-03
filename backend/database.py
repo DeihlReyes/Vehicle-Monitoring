@@ -89,6 +89,17 @@ class DatabaseManager:
                     )
                 """)
 
+                # Create logs table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TIMESTAMP NOT NULL,
+                        level TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        source TEXT
+                    )
+                """)
+
                 conn.commit()
                 logger.info("Database initialized successfully")
 
@@ -288,4 +299,38 @@ class DatabaseManager:
                 }
         except Exception as e:
             logger.error(f"Failed to get session data: {str(e)}")
-            raise 
+            raise
+
+    def store_log(self, level: str, message: str, source: str = None):
+        """Store a log entry in the database"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO logs (timestamp, level, message, source) VALUES (?, ?, ?, ?)",
+                    (datetime.now(), level, message, source)
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to store log: {str(e)}")
+            # Do not raise to avoid recursion
+
+    def get_logs(self, limit: int = 100, level: str = None) -> list:
+        """Fetch recent logs from the database, optionally filtered by level"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                if level:
+                    cursor.execute(
+                        "SELECT * FROM logs WHERE level = ? ORDER BY timestamp DESC LIMIT ?",
+                        (level, limit)
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?",
+                        (limit,)
+                    )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to fetch logs: {str(e)}")
+            return [] 

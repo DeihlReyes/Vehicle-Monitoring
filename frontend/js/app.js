@@ -143,6 +143,11 @@ class App {
       // Store current tab
       this.currentTab = tabId;
 
+      // If system tab, reload logs
+      if (tabId === "system") {
+        this.loadAndRenderLogs();
+      }
+
       // Trigger resize event for charts
       if (window.charts && typeof window.charts.handleResize === "function") {
         setTimeout(() => window.charts.handleResize(), 100);
@@ -195,9 +200,44 @@ class App {
       ) {
         window.charts.updateBehaviorChart(stats);
       }
+
+      // Load logs for system tab
+      await this.loadAndRenderLogs();
     } catch (error) {
       console.error("Failed to load initial data:", error);
     }
+  }
+
+  async loadAndRenderLogs() {
+    try {
+      const response = await fetch("/logs?limit=100");
+      const logs = await response.json();
+      this.renderLogs(logs);
+    } catch (error) {
+      console.error("Failed to load logs:", error);
+    }
+  }
+
+  renderLogs(logs) {
+    const debugConsole = document.getElementById("debug-console");
+    if (!debugConsole) return;
+    debugConsole.innerHTML = "";
+    logs.reverse().forEach((log) => {
+      const line = document.createElement("div");
+      line.className = `log-line log-${log.level.toLowerCase()}`;
+      const timeSpan = document.createElement("span");
+      timeSpan.className = "log-time";
+      timeSpan.textContent = log.timestamp
+        ? new Date(log.timestamp).toLocaleTimeString()
+        : "";
+      const msgSpan = document.createElement("span");
+      msgSpan.className = "log-message";
+      msgSpan.textContent = log.message;
+      line.appendChild(timeSpan);
+      line.appendChild(msgSpan);
+      debugConsole.appendChild(line);
+    });
+    debugConsole.scrollTop = debugConsole.scrollHeight;
   }
 
   updateRealTimeData(data) {

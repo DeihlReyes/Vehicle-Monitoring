@@ -472,5 +472,33 @@ async def shutdown():
     except Exception as e:
         logger.error(f"Error during shutdown: {str(e)}")
 
+class DBLogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            db_manager.store_log(record.levelname, msg, record.name)
+        except Exception as e:
+            # Avoid recursion if DB logging fails
+            pass
+
+# Add DBLogHandler to root logger
+if not any(isinstance(h, DBLogHandler) for h in logging.getLogger().handlers):
+    db_log_handler = DBLogHandler()
+    db_log_handler.setLevel(logging.DEBUG)
+    db_log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(db_log_handler)
+
+@app.route('/logs')
+async def get_logs():
+    """Get recent logs from the database"""
+    try:
+        limit = int((await app.request.args.get('limit', 100)))
+        level = app.request.args.get('level')
+        logs = db_manager.get_logs(limit=limit, level=level)
+        return jsonify(logs)
+    except Exception as e:
+        logger.error(f"Failed to get logs: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8000)
