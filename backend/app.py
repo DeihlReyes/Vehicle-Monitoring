@@ -334,21 +334,11 @@ async def get_current_session_latest_data():
 
 @app.route('/sessions/current/behavior_summary')
 async def get_current_session_behavior_summary():
-    """Return the count of each behavior event type for the current open session."""
+    """Return the count of each behavior event type for the singleton session (cumulative)."""
     try:
-        session = db_manager.get_last_open_session()
-        if not session:
-            logger.debug("No open session found for behavior summary.")
-            # Return zeros for all behaviors if no open session
-            return jsonify({
-                'aggressive_acceleration': 0,
-                'normal_acceleration': 0,
-                'aggressive_deceleration': 0,
-                'normal_deceleration': 0,
-                'aggressive_lane_change': 0,
-                'normal_lane_change': 0
-            })
-        logger.debug(f"Querying behavior summary for session ID: {session.id}")
+        # Always use the singleton session
+        session_id = get_or_create_singleton_session()
+        logger.debug(f"Querying behavior summary for singleton session ID: {session_id}")
         with db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -356,7 +346,7 @@ async def get_current_session_behavior_summary():
                 FROM behavior_events
                 WHERE session_id = ?
                 GROUP BY behavior_type
-            """, (session.id,))
+            """, (session_id,))
             rows = cursor.fetchall()
             summary = {
                 'aggressive_acceleration': 0,
@@ -369,10 +359,10 @@ async def get_current_session_behavior_summary():
             for row in rows:
                 if row['behavior_type'] in summary:
                     summary[row['behavior_type']] = row['count']
-        logger.debug(f"Behavior summary for session {session.id}: {summary}")
+        logger.debug(f"Behavior summary for singleton session {session_id}: {summary}")
         return jsonify(summary)
     except Exception as e:
-        logger.error(f"Failed to get behavior summary for current session: {str(e)}")
+        logger.error(f"Failed to get behavior summary for singleton session: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 def get_or_create_singleton_session():
@@ -611,80 +601,79 @@ async def ws():
     try:
         # Send the latest data immediately on connect
         try:
-            session = db_manager.get_last_open_session()
-            if session:
-                with db_manager.get_connection() as conn:
-                    cursor = conn.cursor()
-                    # Latest sensor data
-                    cursor.execute("SELECT * FROM sensor_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
-                    sensor_row = cursor.fetchone()
-                    if sensor_row:
-                        accelerometer = json.loads(sensor_row['accelerometer_data'])
-                        gyroscope = json.loads(sensor_row['gyroscope_data'])
-                    else:
-                        accelerometer = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
-                        gyroscope = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
-                    # Latest OBD data
-                    cursor.execute("SELECT * FROM obd_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
-                    obd_row = cursor.fetchone()
-                    if obd_row:
-                        obd_data = {
-                            'rpm': obd_row['rpm'],
-                            'speed': obd_row['speed'],
-                            'throttle': obd_row['throttle_position'],
-                            'engineLoad': obd_row['engine_load'],
-                            'coolant': obd_row['coolant_temp'],
-                            'battery': obd_row['voltage'],
-                            'intake': obd_row['intake_pressure'] if 'intake_pressure' in obd_row.keys() else None
-                        }
-                    else:
-                        obd_data = {}
-                    # Latest behavior event
-                    cursor.execute("SELECT * FROM behavior_events WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
-                    behavior_row = cursor.fetchone()
-                    if behavior_row:
-                        behavior = {
-                            'event': behavior_row['behavior_type'],
-                            'confidence': behavior_row['confidence'] if behavior_row['confidence'] is not None else 0.95,
-                            'timestamp': datetime.fromisoformat(behavior_row['timestamp']).timestamp() if behavior_row['timestamp'] else datetime.now().timestamp()
-                        }
-                    else:
-                        behavior = {'event': 'normal_driving', 'confidence': 0.95, 'timestamp': datetime.now().timestamp()}
-                    # Behavior summary
-                    behavior_summary = {
-                        'aggressive_acceleration': 0,
-                        'normal_acceleration': 0,
-                        'aggressive_deceleration': 0,
-                        'normal_deceleration': 0,
-                        'aggressive_lane_change': 0,
-                        'normal_lane_change': 0
+            session_id = get_or_create_singleton_session()
+            with db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                # Latest sensor data
+                cursor.execute("SELECT * FROM sensor_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session_id,))
+                sensor_row = cursor.fetchone()
+                if sensor_row:
+                    accelerometer = json.loads(sensor_row['accelerometer_data'])
+                    gyroscope = json.loads(sensor_row['gyroscope_data'])
+                else:
+                    accelerometer = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
+                    gyroscope = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
+                # Latest OBD data
+                cursor.execute("SELECT * FROM obd_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session_id,))
+                obd_row = cursor.fetchone()
+                if obd_row:
+                    obd_data = {
+                        'rpm': obd_row['rpm'],
+                        'speed': obd_row['speed'],
+                        'throttle': obd_row['throttle_position'],
+                        'engineLoad': obd_row['engine_load'],
+                        'coolant': obd_row['coolant_temp'],
+                        'battery': obd_row['voltage'],
+                        'intake': obd_row['intake_pressure'] if 'intake_pressure' in obd_row.keys() else None
                     }
-                    cursor.execute("""
-                        SELECT behavior_type, COUNT(*) as count
-                        FROM behavior_events
-                        WHERE session_id = ?
-                        GROUP BY behavior_type
-                    """, (session.id,))
-                    rows = cursor.fetchall()
-                    for row in rows:
-                        if row['behavior_type'] in behavior_summary:
-                            behavior_summary[row['behavior_type']] = row['count']
-                    # Compose the data dict
-                    data = {
-                        'timestamp': datetime.now().isoformat(),
-                        'sensor_data': {'accelerometer': accelerometer, 'gyroscope': gyroscope},
-                        'obd_data': obd_data,
-                        'behavior': behavior,
-                        'system_health': {
-                            'status': system_health.status.value,
-                            'mpu_sensor_ok': system_health.mpu_sensor_ok,
-                            'obd_connection_ok': system_health.obd_connection_ok,
-                            'error_counts': system_health.error_count,
-                            'last_error': system_health.last_error
-                        },
-                        'behavior_summary': behavior_summary
+                else:
+                    obd_data = {}
+                # Latest behavior event
+                cursor.execute("SELECT * FROM behavior_events WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session_id,))
+                behavior_row = cursor.fetchone()
+                if behavior_row:
+                    behavior = {
+                        'event': behavior_row['behavior_type'],
+                        'confidence': behavior_row['confidence'] if behavior_row['confidence'] is not None else 0.95,
+                        'timestamp': datetime.fromisoformat(behavior_row['timestamp']).timestamp() if behavior_row['timestamp'] else datetime.now().timestamp()
                     }
-                    await client.send(json.dumps(data))
+                else:
+                    behavior = {'event': 'normal_driving', 'confidence': 0.95, 'timestamp': datetime.now().timestamp()}
+                # Behavior summary
+                behavior_summary = {
+                    'aggressive_acceleration': 0,
+                    'normal_acceleration': 0,
+                    'aggressive_deceleration': 0,
+                    'normal_deceleration': 0,
+                    'aggressive_lane_change': 0,
+                    'normal_lane_change': 0
+                }
+                cursor.execute("""
+                    SELECT behavior_type, COUNT(*) as count
+                    FROM behavior_events
+                    WHERE session_id = ?
+                    GROUP BY behavior_type
+                """, (session_id,))
+                rows = cursor.fetchall()
+                for row in rows:
+                    if row['behavior_type'] in behavior_summary:
+                        behavior_summary[row['behavior_type']] = row['count']
+                # Compose the data dict
+                data = {
+                    'timestamp': datetime.now().isoformat(),
+                    'sensor_data': {'accelerometer': accelerometer, 'gyroscope': gyroscope},
+                    'obd_data': obd_data,
+                    'behavior': behavior,
+                    'system_health': {
+                        'status': system_health.status.value,
+                        'mpu_sensor_ok': system_health.mpu_sensor_ok,
+                        'obd_connection_ok': system_health.obd_connection_ok,
+                        'error_counts': system_health.error_count,
+                        'last_error': system_health.last_error
+                    },
+                    'behavior_summary': behavior_summary
+                }
+                await client.send(json.dumps(data))
         except Exception as e:
             logger.error(f"Failed to send initial data to new WebSocket client: {str(e)}")
         # Now enter the normal receive loop
