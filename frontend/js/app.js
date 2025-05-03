@@ -177,6 +177,9 @@ class App {
 
     window.wsHandler.onData((data) => {
       this.updateRealTimeData(data);
+      if (data.behavior_summary) {
+        this.updateBehaviorSummary(data.behavior_summary);
+      }
     });
 
     window.wsHandler.onStatusChange((connected) => {
@@ -187,34 +190,21 @@ class App {
   async loadInitialData() {
     try {
       // Load latest data for current session and update dashboard immediately
-      const latestDataResponse = await fetch(
-        "http://localhost:8000/sessions/current/latest_data"
-      );
+      const latestDataResponse = await fetch("/sessions/current/latest_data");
       if (latestDataResponse.ok) {
         const latestData = await latestDataResponse.json();
         if (latestData && latestData.sensor_data) {
           this.updateRealTimeData(latestData);
         }
       }
-      // Load behavior summary for current session and update dashboard
-      const summaryResponse = await fetch(
-        "http://localhost:8000/sessions/current/behavior_summary"
-      );
-      if (summaryResponse.ok) {
-        const summary = await summaryResponse.json();
-        this.updateBehaviorSummary(summary);
-      }
+      // (No need to fetch behavior summary, handled by WebSocket)
       // Load recent sessions
-      const sessionsResponse = await fetch(
-        "http://localhost:8000/sessions/recent"
-      );
+      const sessionsResponse = await fetch("/sessions/recent");
       const sessions = await sessionsResponse.json();
       this.updateSessionsList(sessions);
 
       // Load behavior statistics
-      const statsResponse = await fetch(
-        "http://localhost:8000/statistics/behavior"
-      );
+      const statsResponse = await fetch("/statistics/behavior");
       const stats = await statsResponse.json();
       if (
         window.charts &&
@@ -232,7 +222,7 @@ class App {
 
   async loadAndRenderLogs() {
     try {
-      const response = await fetch("http://localhost:8000/logs?limit=100");
+      const response = await fetch("/logs?limit=100");
       const logs = await response.json();
       this.renderLogs(logs);
     } catch (error) {

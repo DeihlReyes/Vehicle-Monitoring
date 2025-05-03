@@ -534,6 +534,31 @@ async def broadcast_sensor_data():
                 }
 
             # Combine all data
+            # Calculate behavior summary for the current session
+            behavior_summary = {
+                'aggressive_acceleration': 0,
+                'normal_acceleration': 0,
+                'aggressive_deceleration': 0,
+                'normal_deceleration': 0,
+                'aggressive_lane_change': 0,
+                'normal_lane_change': 0
+            }
+            try:
+                with db_manager.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT behavior_type, COUNT(*) as count
+                        FROM behavior_events
+                        WHERE session_id = ?
+                        GROUP BY behavior_type
+                    """, (current_session_id,))
+                    rows = cursor.fetchall()
+                    for row in rows:
+                        if row['behavior_type'] in behavior_summary:
+                            behavior_summary[row['behavior_type']] = row['count']
+            except Exception as e:
+                logger.error(f"Failed to calculate behavior summary: {str(e)}")
+
             data = {
                 'timestamp': datetime.now().isoformat(),
                 'sensor_data': sensor_data,
@@ -545,7 +570,8 @@ async def broadcast_sensor_data():
                     'obd_connection_ok': system_health.obd_connection_ok,
                     'error_counts': system_health.error_count,
                     'last_error': system_health.last_error
-                }
+                },
+                'behavior_summary': behavior_summary
             }
 
             # Only broadcast if behavior is not 'rider_stopped', or if the last event was not 'rider_stopped'
