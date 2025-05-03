@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 from obd1 import OBDInterface  # Import the new OBDInterface class
 import os
 import threading
+from quart_cors import cors
 import queue
 import time
 
@@ -63,6 +64,7 @@ system_health = SystemHealth(
 )
 
 app = Quart(__name__)
+app = cors(app, allow_origin="*")
 
 # Debug mode configuration
 DEBUG_MODE = True  # Can be set via environment variable
