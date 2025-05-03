@@ -188,60 +188,13 @@ class App {
   }
 
   async loadInitialData() {
-    try {
-      // (No need to fetch latest data, handled by WebSocket)
-      // Load recent sessions
-      const sessionsResponse = await fetch("/sessions/recent");
-      const sessions = await sessionsResponse.json();
-      this.updateSessionsList(sessions);
-
-      // Load behavior statistics
-      const statsResponse = await fetch("/statistics/behavior");
-      const stats = await statsResponse.json();
-      if (
-        window.charts &&
-        typeof window.charts.updateBehaviorChart === "function"
-      ) {
-        window.charts.updateBehaviorChart(stats);
-      }
-
-      // Load logs for system tab
-      await this.loadAndRenderLogs();
-    } catch (error) {
-      console.error("Failed to load initial data:", error);
-    }
+    // No HTTP fetches; all data comes from WebSocket now.
+    return;
   }
 
   async loadAndRenderLogs() {
-    try {
-      const response = await fetch("/logs?limit=100");
-      const logs = await response.json();
-      this.renderLogs(logs);
-    } catch (error) {
-      console.error("Failed to load logs:", error);
-    }
-  }
-
-  renderLogs(logs) {
-    const debugConsole = document.getElementById("debug-console");
-    if (!debugConsole) return;
-    debugConsole.innerHTML = "";
-    logs.reverse().forEach((log) => {
-      const line = document.createElement("div");
-      line.className = `log-line log-${log.level.toLowerCase()}`;
-      const timeSpan = document.createElement("span");
-      timeSpan.className = "log-time";
-      timeSpan.textContent = log.timestamp
-        ? new Date(log.timestamp).toLocaleTimeString()
-        : "";
-      const msgSpan = document.createElement("span");
-      msgSpan.className = "log-message";
-      msgSpan.textContent = log.message;
-      line.appendChild(timeSpan);
-      line.appendChild(msgSpan);
-      debugConsole.appendChild(line);
-    });
-    debugConsole.scrollTop = debugConsole.scrollHeight;
+    // No HTTP fetches; logs must be sent via WebSocket if needed.
+    return;
   }
 
   updateRealTimeData(data) {
