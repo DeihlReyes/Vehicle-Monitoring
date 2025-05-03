@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from obd1 import OBDInterface  # Import the new OBDInterface class
 import os
+import threading
+import queue
+import time
 
 # Error handling classes
 class SensorError(Exception):
@@ -472,13 +475,45 @@ async def shutdown():
     except Exception as e:
         logger.error(f"Error during shutdown: {str(e)}")
 
+# Thread-safe queue for log batching
+log_queue = queue.Queue()
+
+# Batch log worker
+def log_worker():
+    while True:
+        batch = []
+        try:
+            # Wait for at least one log
+            log = log_queue.get(timeout=0.5)
+            batch.append(log)
+            # Gather more logs if available (up to 100 per batch)
+            while not log_queue.empty() and len(batch) < 100:
+                batch.append(log_queue.get_nowait())
+        except queue.Empty:
+            pass
+        if batch:
+            try:
+                with db_manager.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.executemany(
+                        "INSERT INTO logs (timestamp, level, message, source) VALUES (?, ?, ?, ?)",
+                        batch
+                    )
+                    conn.commit()
+            except Exception as e:
+                print(f"Failed to batch log: {e}")
+
+# Start the log worker thread
+threading.Thread(target=log_worker, daemon=True).start()
+
 class DBLogHandler(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)
-            db_manager.store_log(record.levelname, msg, record.name)
+            # Enqueue log for batch writing
+            log_queue.put((datetime.now(), record.levelname, msg, record.name))
         except Exception as e:
-            # Avoid recursion if DB logging fails
+            # Avoid recursion if queueing fails
             pass
 
 # Add DBLogHandler to root logger
