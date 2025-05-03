@@ -94,7 +94,7 @@ except Exception as e:
     obd_interface = None
 
 # Initialize behavior predictor
-model_path = os.path.join(os.path.dirname(__file__), 'model-2.h5')
+model_path = os.path.join(os.path.dirname(__file__), 'model-defended.h5')
 if os.path.exists(model_path):
     logger.info(f"Behavior model file found at {model_path}, loading model.")
     behavior_predictor = BehaviorPredictor(model_path=model_path)
