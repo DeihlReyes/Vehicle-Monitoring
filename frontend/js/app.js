@@ -194,6 +194,12 @@ class App {
           this.updateRealTimeData(latestData);
         }
       }
+      // Load behavior summary for current session and update dashboard
+      const summaryResponse = await fetch("/sessions/current/behavior_summary");
+      if (summaryResponse.ok) {
+        const summary = await summaryResponse.json();
+        this.updateBehaviorSummary(summary);
+      }
       // Load recent sessions
       const sessionsResponse = await fetch("/sessions/recent");
       const sessions = await sessionsResponse.json();
@@ -366,6 +372,24 @@ class App {
       existingStatus.remove();
     }
     statusContainer.prepend(connectionStatus);
+  }
+
+  updateBehaviorSummary(summary) {
+    // Update the behavior summary counts in the dashboard
+    const types = [
+      "aggressive_acceleration",
+      "normal_acceleration",
+      "aggressive_deceleration",
+      "normal_deceleration",
+      "aggressive_lane_change",
+      "normal_lane_change",
+    ];
+    types.forEach((type) => {
+      const el = document.getElementById(`${type}-count`);
+      if (el && summary[type] !== undefined) {
+        el.textContent = summary[type];
+      }
+    });
   }
 
   handleResize() {

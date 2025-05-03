@@ -325,6 +325,46 @@ async def get_current_session_latest_data():
         logger.error(f"Failed to get latest data for current session: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/sessions/current/behavior_summary')
+async def get_current_session_behavior_summary():
+    """Return the count of each behavior event type for the current open session."""
+    try:
+        session = db_manager.get_last_open_session()
+        if not session:
+            # Return zeros for all behaviors if no open session
+            return jsonify({
+                'aggressive_acceleration': 0,
+                'normal_acceleration': 0,
+                'aggressive_deceleration': 0,
+                'normal_deceleration': 0,
+                'aggressive_lane_change': 0,
+                'normal_lane_change': 0
+            })
+        with db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT behavior_type, COUNT(*) as count
+                FROM behavior_events
+                WHERE session_id = ?
+                GROUP BY behavior_type
+            """, (session.id,))
+            rows = cursor.fetchall()
+            summary = {
+                'aggressive_acceleration': 0,
+                'normal_acceleration': 0,
+                'aggressive_deceleration': 0,
+                'normal_deceleration': 0,
+                'aggressive_lane_change': 0,
+                'normal_lane_change': 0
+            }
+            for row in rows:
+                if row['behavior_type'] in summary:
+                    summary[row['behavior_type']] = row['count']
+        return jsonify(summary)
+    except Exception as e:
+        logger.error(f"Failed to get behavior summary for current session: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 async def broadcast_sensor_data():
     global current_session_id, mpu_sensor, obd_interface
     
