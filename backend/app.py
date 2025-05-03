@@ -609,6 +609,85 @@ async def ws():
     client = websocket._get_current_object()
     connected_clients.add(client)
     try:
+        # Send the latest data immediately on connect
+        try:
+            session = db_manager.get_last_open_session()
+            if session:
+                with db_manager.get_connection() as conn:
+                    cursor = conn.cursor()
+                    # Latest sensor data
+                    cursor.execute("SELECT * FROM sensor_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
+                    sensor_row = cursor.fetchone()
+                    if sensor_row:
+                        accelerometer = json.loads(sensor_row['accelerometer_data'])
+                        gyroscope = json.loads(sensor_row['gyroscope_data'])
+                    else:
+                        accelerometer = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
+                        gyroscope = {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
+                    # Latest OBD data
+                    cursor.execute("SELECT * FROM obd_data WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
+                    obd_row = cursor.fetchone()
+                    if obd_row:
+                        obd_data = {
+                            'rpm': obd_row['rpm'],
+                            'speed': obd_row['speed'],
+                            'throttle': obd_row['throttle_position'],
+                            'engineLoad': obd_row['engine_load'],
+                            'coolant': obd_row['coolant_temp'],
+                            'battery': obd_row['voltage'],
+                            'intake': obd_row['intake_pressure'] if 'intake_pressure' in obd_row.keys() else None
+                        }
+                    else:
+                        obd_data = {}
+                    # Latest behavior event
+                    cursor.execute("SELECT * FROM behavior_events WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1", (session.id,))
+                    behavior_row = cursor.fetchone()
+                    if behavior_row:
+                        behavior = {
+                            'event': behavior_row['behavior_type'],
+                            'confidence': behavior_row['confidence'] if behavior_row['confidence'] is not None else 0.95,
+                            'timestamp': datetime.fromisoformat(behavior_row['timestamp']).timestamp() if behavior_row['timestamp'] else datetime.now().timestamp()
+                        }
+                    else:
+                        behavior = {'event': 'normal_driving', 'confidence': 0.95, 'timestamp': datetime.now().timestamp()}
+                    # Behavior summary
+                    behavior_summary = {
+                        'aggressive_acceleration': 0,
+                        'normal_acceleration': 0,
+                        'aggressive_deceleration': 0,
+                        'normal_deceleration': 0,
+                        'aggressive_lane_change': 0,
+                        'normal_lane_change': 0
+                    }
+                    cursor.execute("""
+                        SELECT behavior_type, COUNT(*) as count
+                        FROM behavior_events
+                        WHERE session_id = ?
+                        GROUP BY behavior_type
+                    """, (session.id,))
+                    rows = cursor.fetchall()
+                    for row in rows:
+                        if row['behavior_type'] in behavior_summary:
+                            behavior_summary[row['behavior_type']] = row['count']
+                    # Compose the data dict
+                    data = {
+                        'timestamp': datetime.now().isoformat(),
+                        'sensor_data': {'accelerometer': accelerometer, 'gyroscope': gyroscope},
+                        'obd_data': obd_data,
+                        'behavior': behavior,
+                        'system_health': {
+                            'status': system_health.status.value,
+                            'mpu_sensor_ok': system_health.mpu_sensor_ok,
+                            'obd_connection_ok': system_health.obd_connection_ok,
+                            'error_counts': system_health.error_count,
+                            'last_error': system_health.last_error
+                        },
+                        'behavior_summary': behavior_summary
+                    }
+                    await client.send(json.dumps(data))
+        except Exception as e:
+            logger.error(f"Failed to send initial data to new WebSocket client: {str(e)}")
+        # Now enter the normal receive loop
         while True:
             try:
                 # Keep the connection alive and handle incoming messages
