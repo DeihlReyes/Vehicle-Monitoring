@@ -176,6 +176,29 @@ class App {
     }
 
     window.wsHandler.onData((data) => {
+      if (data.type === "init") {
+        // Initial cumulative data
+        if (data.sensor_data && window.charts) {
+          this.populateSensorCharts(data.sensor_data);
+        }
+        if (data.behavior_events) {
+          this.populateEventList(data.behavior_events);
+        }
+        if (data.obd_data && data.obd_data.length > 0) {
+          const latestOBD = data.obd_data[data.obd_data.length - 1];
+          window.app.updateOBDMetrics({
+            rpm: latestOBD.rpm,
+            speed: latestOBD.speed,
+            throttle: latestOBD.throttle_position,
+            engineLoad: latestOBD.engine_load,
+            coolant: latestOBD.coolant_temp,
+            battery: latestOBD.voltage,
+            intake: latestOBD.intake_pressure,
+          });
+        }
+        return;
+      }
+      // Real-time update
       this.updateRealTimeData(data);
       if (data.behavior_summary) {
         this.updateBehaviorSummary(data.behavior_summary);
@@ -188,7 +211,7 @@ class App {
   }
 
   async loadInitialData() {
-    // No HTTP fetches; all data comes from WebSocket now.
+    // No HTTP fetch; initial data will come via WebSocket 'init' message
     return;
   }
 
