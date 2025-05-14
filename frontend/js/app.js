@@ -87,6 +87,7 @@ window.app = {
 class App {
   constructor() {
     this.currentTab = "dashboard";
+    this.batteryVoltage = null;
     this.initializeApp();
   }
 
@@ -167,6 +168,21 @@ class App {
 
     // Handle window resize for charts
     window.addEventListener("resize", this.handleResize.bind(this));
+
+    // Battery card flip logic
+    const batteryCard = document.getElementById("battery-card");
+    if (batteryCard) {
+      batteryCard.addEventListener("click", () => {
+        batteryCard.classList.toggle("flipped");
+      });
+    }
+    // Coolant card flip logic
+    const coolantCard = document.getElementById("coolant-card");
+    if (coolantCard) {
+      coolantCard.addEventListener("click", () => {
+        coolantCard.classList.toggle("flipped");
+      });
+    }
   }
 
   setupWebSocket() {
@@ -267,12 +283,86 @@ class App {
     updateElement("throttle-value", data.throttle || data.THROTTLE_POS, "%");
     updateElement("coolant-temp", data.coolant || data.COOLANT_TEMP, "°C");
     updateElement("intake-temp", data.intake || data.INTAKE_PRESSURE, " kPa");
-    updateElement(
-      "battery-voltage",
-      data.battery || data.CONTROL_MODULE_VOLTAGE,
-      "V"
-    );
+    const voltage = data.battery || data.CONTROL_MODULE_VOLTAGE;
+    updateElement("battery-voltage", voltage, "V");
     updateElement("engine-load", data.engineLoad || data.ENGINE_LOAD, "%");
+
+    // Battery health logic
+    this.batteryVoltage = voltage;
+    const healthMsg = document.getElementById("battery-health-message");
+    const flipBack = document.querySelector("#battery-card .flip-card-back");
+    const flipFront = document.querySelector("#battery-card .flip-card-front");
+    if (healthMsg) {
+      let msg = "Normal";
+      let cls = "normal";
+      if (typeof voltage !== "number" || isNaN(voltage) || voltage === 0) {
+        msg = "Warning: Weak or failing battery (< 12.0V)";
+        cls = "danger";
+      } else if (voltage < 12.0) {
+        msg = "Warning: Weak or failing battery (< 12.0V)";
+        cls = "danger";
+      } else if (voltage > 14.5) {
+        msg = "Warning: Overcharging (> 14.5V)";
+        cls = "warning";
+      } else {
+        msg = "Battery voltage normal (12.0V - 14.5V)";
+        cls = "normal";
+      }
+      healthMsg.textContent = msg;
+      healthMsg.className = `battery-health-message ${cls}`;
+      if (flipBack) {
+        flipBack.classList.remove("normal", "warning", "danger");
+        flipBack.classList.add(cls);
+      }
+      if (flipFront) {
+        flipFront.classList.remove("normal", "warning", "danger");
+        flipFront.classList.add(cls);
+      }
+    }
+
+    // Coolant health logic
+    const coolantValue = data.coolant || data.COOLANT_TEMP;
+    const coolantHealthMsg = document.getElementById("coolant-health-message");
+    const coolantFlipBack = document.querySelector(
+      "#coolant-card .flip-card-back"
+    );
+    const coolantFlipFront = document.querySelector(
+      "#coolant-card .flip-card-front"
+    );
+    if (coolantHealthMsg) {
+      let msg = "Normal";
+      let cls = "normal";
+      if (
+        typeof coolantValue !== "number" ||
+        isNaN(coolantValue) ||
+        coolantValue === 0
+      ) {
+        msg = "Danger: Coolant out of range (< 48°C or > 110°C)";
+        cls = "danger";
+      } else if (coolantValue < 48 || coolantValue > 110) {
+        msg = "Danger: Coolant out of range (< 48°C or > 110°C)";
+        cls = "danger";
+      } else if (
+        (coolantValue >= 48 && coolantValue < 54) ||
+        (coolantValue > 104 && coolantValue <= 110)
+      ) {
+        msg = "Warning: Near limit (48-54°C or 104-110°C)";
+        cls = "warning";
+      } else {
+        msg = "Coolant temperature normal (54°C - 104°C)";
+        cls = "normal";
+      }
+      coolantHealthMsg.textContent = msg;
+      coolantHealthMsg.className = `coolant-health-message ${cls}`;
+      if (coolantFlipBack) {
+        coolantFlipBack.classList.remove("normal", "warning", "danger");
+        coolantFlipBack.classList.add(cls);
+      }
+      if (coolantFlipFront) {
+        coolantFlipFront.classList.remove("normal", "warning", "danger");
+        coolantFlipFront.classList.add(cls);
+      }
+    }
   }
 
   updateSystemStatus(health) {

@@ -167,12 +167,10 @@ body {
 }
 
 .secondary-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  display: flex !important;
+  flex-direction: row;
   gap: 1rem;
-  flex: 1; /* Take up remaining space */
-  min-height: 0; /* Allow proper flex sizing */
-  align-content: space-evenly; /* Distribute space evenly */
+  height: 30%;
 }
 
 .obd-card {
@@ -297,4 +295,174 @@ h3 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* Flip Card Styles for Battery */
+.flip-card {
+  background: transparent;
+  perspective: 1000px;
+  cursor: pointer;
+}
+
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.flip-card.flipped .flip-card-inner {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.flip-card-front {
+  background: white;
+  border-radius: 10px;
+}
+
+.flip-card-back {
+  background: #f8f9fa;
+  border-radius: 10px;
+  transform: rotateY(180deg);
+  color: #333;
+}
+
+.battery-health-message.normal {
+  color: #28a745;
+  font-weight: bold;
+}
+.battery-health-message.warning {
+  color: #ffc107;
+  font-weight: bold;
+}
+.battery-health-message.danger {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Remove padding for battery flip card only */
+#battery-card.obd-card.compact,
+#battery-card .flip-card-front,
+#battery-card .flip-card-back {
+  padding: 0 !important;
+}
+
+/* Battery card back color states */
+#battery-card .flip-card-back.normal {
+  background: #e8f5e9 !important; /* greenish */
+}
+#battery-card .flip-card-back.warning {
+  background: #fff8e1 !important; /* yellowish */
+}
+#battery-card .flip-card-back.danger {
+  background: #ffebee !important; /* reddish */
+}
+
+/* Remove padding for coolant flip card only */
+#coolant-card.obd-card.compact,
+#coolant-card .flip-card-front,
+#coolant-card .flip-card-back {
+  padding: 0 !important;
+}
+
+/* Coolant card back color states */
+#coolant-card .flip-card-back.normal {
+  background: #e8f5e9 !important; /* greenish */
+}
+#coolant-card .flip-card-back.warning {
+  background: #fff8e1 !important; /* yellowish */
+}
+#coolant-card .flip-card-back.danger {
+  background: #ffebee !important; /* reddish */
+}
+.coolant-health-message.normal {
+  color: #28a745;
+  font-weight: bold;
+}
+.coolant-health-message.warning {
+  color: #ffc107;
+  font-weight: bold;
+}
+.coolant-health-message.danger {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Make coolant and battery cards fill the grid */
+#coolant-card.obd-card.compact,
+#battery-card.obd-card.compact {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+}
+.secondary-metrics-grid {
+  grid-template-columns: 1fr 1fr !important;
+}
+
+/* Larger font for metric values and health messages on big cards */
+#coolant-card .metric-value,
+#battery-card .metric-value {
+  font-size: 2.5rem !important;
+}
+#coolant-card .coolant-health-message,
+#battery-card .battery-health-message {
+  font-size: 1.5rem !important;
+}
+#coolant-card .metric-label,
+#battery-card .metric-label {
+  font-size: 1.2rem !important;
+}
+
+/* Battery and Coolant card front color states */
+#battery-card .flip-card-front.normal {
+  background: #e8f5e9 !important;
+}
+#battery-card .flip-card-front.warning {
+  background: #fff8e1 !important;
+}
+#battery-card .flip-card-front.danger {
+  background: #ffebee !important;
+}
+#coolant-card .flip-card-front.normal {
+  background: #e8f5e9 !important;
+}
+#coolant-card .flip-card-front.warning {
+  background: #fff8e1 !important;
+}
+#coolant-card .flip-card-front.danger {
+  background: #ffebee !important;
+}
+
+#battery-card .flip-card-front.danger,
+#battery-card .flip-card-back.danger,
+#coolant-card .flip-card-front.danger,
+#coolant-card .flip-card-back.danger {
+  background: #ff6f60 !important; /* even lighter red */
+  color: #fff !important;
+}
+
+#coolant-card .metric-label,
+#coolant-card .metric-value,
+#coolant-card .coolant-health-message,
+#battery-card .metric-label,
+#battery-card .metric-value,
+#battery-card .battery-health-message {
+  font-weight: bold !important;
 }
