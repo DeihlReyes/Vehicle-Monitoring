@@ -214,13 +214,23 @@ class App {
   }
 
   updateRealTimeData(data) {
-    // Update motion data charts
-    if (data.sensor_data && window.charts) {
-      if (typeof window.charts.updateAccelerometerChart === "function") {
-        window.charts.updateAccelerometerChart(data.sensor_data.accelerometer);
+    // Update motion data values
+    if (data.sensor_data) {
+      if (data.sensor_data.accelerometer) {
+        document.getElementById("accel-x").textContent =
+          data.sensor_data.accelerometer.x?.toFixed(2) ?? 0;
+        document.getElementById("accel-y").textContent =
+          data.sensor_data.accelerometer.y?.toFixed(2) ?? 0;
+        document.getElementById("accel-z").textContent =
+          data.sensor_data.accelerometer.z?.toFixed(2) ?? 0;
       }
-      if (typeof window.charts.updateGyroscopeChart === "function") {
-        window.charts.updateGyroscopeChart(data.sensor_data.gyroscope);
+      if (data.sensor_data.gyroscope) {
+        document.getElementById("gyro-x").textContent =
+          data.sensor_data.gyroscope.x?.toFixed(2) ?? 0;
+        document.getElementById("gyro-y").textContent =
+          data.sensor_data.gyroscope.y?.toFixed(2) ?? 0;
+        document.getElementById("gyro-z").textContent =
+          data.sensor_data.gyroscope.z?.toFixed(2) ?? 0;
       }
     }
 
