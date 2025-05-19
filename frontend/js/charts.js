@@ -381,32 +381,23 @@ function handleResize() {
       "yaxis.autorange": true,
     });
 
-    Plotly.relayout("accelerometer-chart", {
-      "xaxis.autorange": true,
-      "yaxis.autorange": true,
-    });
-
-    Plotly.relayout("gyroscope-chart", {
-      "xaxis.autorange": true,
-      "yaxis.autorange": true,
-    });
+    // No longer handling accelerometer or gyroscope charts
   }
 }
 
 // Initialize all charts
 function initializeCharts() {
-  console.log("Initializing all charts...");
+  console.log("Initializing charts...");
 
   // Give the DOM a moment to fully render
   setTimeout(() => {
     const behaviorSuccess = initBehaviorChart();
-    const accelSuccess = initAccelerometerChart();
-    const gyroSuccess = initGyroscopeChart();
 
-    chartsInitialized = behaviorSuccess && accelSuccess && gyroSuccess;
+    // Only initialize behavior chart, not accelerometer or gyroscope charts
+    chartsInitialized = behaviorSuccess;
 
     if (chartsInitialized) {
-      console.log("All charts initialized successfully");
+      console.log("Charts initialized successfully");
 
       // Set up event listeners
       window.addEventListener("resize", handleResize);
@@ -429,7 +420,7 @@ function initializeCharts() {
         normal_lane_change: 0,
       });
     } else {
-      console.error("Failed to initialize all charts");
+      console.error("Failed to initialize charts");
     }
   }, 500);
 }
@@ -444,7 +435,12 @@ document.addEventListener("DOMContentLoaded", () => {
 window.charts = {
   initializeCharts,
   updateBehaviorChart,
-  updateAccelerometerChart,
-  updateGyroscopeChart,
+  // Still export these functions to avoid breaking code that might call them
+  updateAccelerometerChart: function () {
+    console.log("Accelerometer chart updates disabled");
+  },
+  updateGyroscopeChart: function () {
+    console.log("Gyroscope chart updates disabled");
+  },
   handleResize,
 };

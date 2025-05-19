@@ -294,29 +294,59 @@ class App {
   }
 
   updateRealTimeData(data) {
+    // Debug logging
+    console.log(
+      "[DEBUG] updateRealTimeData called, current tab:",
+      this.currentTab
+    );
+
     // Update motion data values
     if (data.sensor_data) {
+      console.log("[DEBUG] sensor_data:", data.sensor_data);
+
+      // Log element existence
+      const accelX = document.getElementById("accel-x");
+      const accelY = document.getElementById("accel-y");
+      const accelZ = document.getElementById("accel-z");
+      const gyroX = document.getElementById("gyro-x");
+      const gyroY = document.getElementById("gyro-y");
+      const gyroZ = document.getElementById("gyro-z");
+
+      console.log("[DEBUG] Elements exist?", {
+        "accel-x": !!accelX,
+        "accel-y": !!accelY,
+        "accel-z": !!accelZ,
+        "gyro-x": !!gyroX,
+        "gyro-y": !!gyroY,
+        "gyro-z": !!gyroZ,
+      });
+
       if (data.sensor_data.accelerometer) {
         const ax = data.sensor_data.accelerometer.x;
         const ay = data.sensor_data.accelerometer.y;
         const az = data.sensor_data.accelerometer.z;
-        document.getElementById("accel-x").textContent =
-          typeof ax === "number" ? ax.toFixed(2) : 0;
-        document.getElementById("accel-y").textContent =
-          typeof ay === "number" ? ay.toFixed(2) : 0;
-        document.getElementById("accel-z").textContent =
-          typeof az === "number" ? az.toFixed(2) : 0;
+        console.log("[DEBUG] Accelerometer values:", { x: ax, y: ay, z: az });
+
+        if (accelX)
+          accelX.textContent = typeof ax === "number" ? ax.toFixed(2) : 0;
+        if (accelY)
+          accelY.textContent = typeof ay === "number" ? ay.toFixed(2) : 0;
+        if (accelZ)
+          accelZ.textContent = typeof az === "number" ? az.toFixed(2) : 0;
       }
+
       if (data.sensor_data.gyroscope) {
         const gx = data.sensor_data.gyroscope.x;
         const gy = data.sensor_data.gyroscope.y;
         const gz = data.sensor_data.gyroscope.z;
-        document.getElementById("gyro-x").textContent =
-          typeof gx === "number" ? gx.toFixed(2) : 0;
-        document.getElementById("gyro-y").textContent =
-          typeof gy === "number" ? gy.toFixed(2) : 0;
-        document.getElementById("gyro-z").textContent =
-          typeof gz === "number" ? gz.toFixed(2) : 0;
+        console.log("[DEBUG] Gyroscope values:", { x: gx, y: gy, z: gz });
+
+        if (gyroX)
+          gyroX.textContent = typeof gx === "number" ? gx.toFixed(2) : 0;
+        if (gyroY)
+          gyroY.textContent = typeof gy === "number" ? gy.toFixed(2) : 0;
+        if (gyroZ)
+          gyroZ.textContent = typeof gz === "number" ? gz.toFixed(2) : 0;
       }
     }
 
