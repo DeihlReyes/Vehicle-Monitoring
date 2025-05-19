@@ -90,6 +90,12 @@ class WebSocketHandler {
 
   onMessage(event) {
     try {
+      // Log raw message
+      console.log(
+        "[WebSocket Debug] Raw message received:",
+        event.data.substring(0, 150) + (event.data.length > 150 ? "..." : "")
+      );
+
       // Limit logging for performance
       if (Math.random() < 0.1) {
         // Log approximately 10% of messages
@@ -101,6 +107,58 @@ class WebSocketHandler {
       }
 
       const data = JSON.parse(event.data);
+
+      // Log accelerometer data for debugging every time
+      if (data.sensor_data && data.sensor_data.accelerometer) {
+        console.log(
+          "[WebSocket Debug] Accelerometer data:",
+          data.sensor_data.accelerometer
+        );
+      }
+
+      // Fast path: immediately update sensor values in DOM
+      // This provides a third backup method to ensure values are updated
+      if (data.sensor_data) {
+        // Update accelerometer values directly
+        if (data.sensor_data.accelerometer) {
+          const ax = data.sensor_data.accelerometer.x;
+          const ay = data.sensor_data.accelerometer.y;
+          const az = data.sensor_data.accelerometer.z;
+
+          // FastPath update: update DOM directly without any processing
+          const accelX = document.getElementById("accel-x");
+          const accelY = document.getElementById("accel-y");
+          const accelZ = document.getElementById("accel-z");
+
+          if (accelX)
+            accelX.textContent = typeof ax === "number" ? ax.toFixed(2) : 0;
+          if (accelY)
+            accelY.textContent = typeof ay === "number" ? ay.toFixed(2) : 0;
+          if (accelZ)
+            accelZ.textContent = typeof az === "number" ? az.toFixed(2) : 0;
+        }
+
+        // Update gyroscope values directly
+        if (data.sensor_data.gyroscope) {
+          const gx = data.sensor_data.gyroscope.x;
+          const gy = data.sensor_data.gyroscope.y;
+          const gz = data.sensor_data.gyroscope.z;
+
+          // FastPath update: update DOM directly without any processing
+          const gyroX = document.getElementById("gyro-x");
+          const gyroY = document.getElementById("gyro-y");
+          const gyroZ = document.getElementById("gyro-z");
+
+          if (gyroX)
+            gyroX.textContent = typeof gx === "number" ? gx.toFixed(2) : 0;
+          if (gyroY)
+            gyroY.textContent = typeof gy === "number" ? gy.toFixed(2) : 0;
+          if (gyroZ)
+            gyroZ.textContent = typeof gz === "number" ? gz.toFixed(2) : 0;
+        }
+      }
+
+      // Then continue with normal processing
       this.processData(data);
       this.notifyDataCallbacks(data);
     } catch (error) {
@@ -113,6 +171,52 @@ class WebSocketHandler {
     try {
       // Update sensor data for charts
       if (data.sensor_data) {
+        // Directly update DOM elements with accelerometer and gyroscope values
+        if (data.sensor_data.accelerometer) {
+          console.log(
+            "[WebSocket] Accelerometer data received:",
+            data.sensor_data.accelerometer
+          );
+          const ax = data.sensor_data.accelerometer.x;
+          const ay = data.sensor_data.accelerometer.y;
+          const az = data.sensor_data.accelerometer.z;
+
+          // Update DOM elements directly
+          const accelX = document.getElementById("accel-x");
+          const accelY = document.getElementById("accel-y");
+          const accelZ = document.getElementById("accel-z");
+
+          if (accelX)
+            accelX.textContent = typeof ax === "number" ? ax.toFixed(2) : 0;
+          if (accelY)
+            accelY.textContent = typeof ay === "number" ? ay.toFixed(2) : 0;
+          if (accelZ)
+            accelZ.textContent = typeof az === "number" ? az.toFixed(2) : 0;
+        }
+
+        if (data.sensor_data.gyroscope) {
+          console.log(
+            "[WebSocket] Gyroscope data received:",
+            data.sensor_data.gyroscope
+          );
+          const gx = data.sensor_data.gyroscope.x;
+          const gy = data.sensor_data.gyroscope.y;
+          const gz = data.sensor_data.gyroscope.z;
+
+          // Update DOM elements directly
+          const gyroX = document.getElementById("gyro-x");
+          const gyroY = document.getElementById("gyro-y");
+          const gyroZ = document.getElementById("gyro-z");
+
+          if (gyroX)
+            gyroX.textContent = typeof gx === "number" ? gx.toFixed(2) : 0;
+          if (gyroY)
+            gyroY.textContent = typeof gy === "number" ? gy.toFixed(2) : 0;
+          if (gyroZ)
+            gyroZ.textContent = typeof gz === "number" ? gz.toFixed(2) : 0;
+        }
+
+        // Existing chart updates can stay as they are
         if (
           window.charts &&
           typeof window.charts.updateAccelerometerChart === "function"
@@ -513,7 +617,7 @@ class WebSocketHandler {
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * this.reconnectAttempts;
     console.log(
-      `Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`
+      `Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`
     );
 
     setTimeout(() => {
@@ -643,42 +747,32 @@ class WebSocketHandler {
 let websocketHandler = null;
 
 function setupWebSocket() {
-  console.log("Setting up WebSocket connection");
+  console.log("Setting up WebSocket connection...");
 
-  // Determine the WebSocket URL
-  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsHost = window.location.hostname || "localhost";
-  const wsPort = 8000; // Backend WebSocket port
-  const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws`;
+  try {
+    // Check if WebSocket is supported
+    if (!window.WebSocket) {
+      console.error("WebSocket not supported by this browser!");
+      alert(
+        "Your browser does not support WebSockets. Please use a modern browser."
+      );
+      return null;
+    }
 
-  console.log(`Connecting to WebSocket at ${wsUrl}`);
+    // Determine WebSocket URL based on current location
+    let wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    let wsHost = window.location.hostname || "localhost";
+    let wsPort = window.location.port || "8000";
+    let wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws`;
 
-  // Create WebSocket handler
-  websocketHandler = new WebSocketHandler(wsUrl);
+    console.log(`Creating WebSocket connection to ${wsUrl}`);
 
-  // Set up reconnect button functionality
-  const reconnectBtn = document.getElementById("reconnect-btn");
-  if (reconnectBtn) {
-    reconnectBtn.addEventListener("click", () => {
-      console.log("Manual reconnection requested");
-      websocketHandler.reset();
-    });
-  }
-
-  // Set up reset errors button functionality
-  const resetErrorsBtn = document.getElementById("reset-errors-btn");
-  if (resetErrorsBtn) {
-    resetErrorsBtn.addEventListener("click", () => {
-      console.log("Resetting error counts");
-      if (websocketHandler) {
-        websocketHandler.systemStatus.error_count = 0;
-        websocketHandler.systemStatus.hardware_errors = 0;
-        websocketHandler.systemStatus.data_errors = 0;
-        websocketHandler.systemStatus.connection_errors = 0;
-        websocketHandler.systemStatus.last_error = "";
-        websocketHandler.updateSystemStatus();
-      }
-    });
+    // Create and return the WebSocket handler
+    window.wsHandler = new WebSocketHandler(wsUrl);
+    return window.wsHandler;
+  } catch (error) {
+    console.error("Error setting up WebSocket:", error);
+    return null;
   }
 }
 

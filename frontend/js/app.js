@@ -196,7 +196,20 @@ class App {
       return;
     }
 
+    // Log when WebSocket is set up
+    console.log("[DEBUG] Setting up WebSocket handlers in app.js");
+
     window.wsHandler.onData((data) => {
+      console.log(
+        "[DEBUG] WebSocket data received in app.js:",
+        data.sensor_data
+          ? {
+              accelerometer: data.sensor_data.accelerometer,
+              gyroscope: data.sensor_data.gyroscope,
+            }
+          : "No sensor data"
+      );
+
       this.updateRealTimeData(data);
       if (data.behavior_summary) {
         this.updateBehaviorSummary(data.behavior_summary);
@@ -296,73 +309,100 @@ class App {
   updateRealTimeData(data) {
     // Debug logging
     console.log(
-      "[DEBUG] updateRealTimeData called, current tab:",
+      "[DEBUG] updateRealTimeData called in app.js, current tab:",
       this.currentTab
     );
 
-    // Update motion data values
-    if (data.sensor_data) {
-      console.log("[DEBUG] sensor_data:", data.sensor_data);
+    try {
+      // Update motion data values
+      if (data.sensor_data) {
+        console.log(
+          "[DEBUG] Updating sensor data in app.js:",
+          data.sensor_data
+        );
 
-      // Log element existence
-      const accelX = document.getElementById("accel-x");
-      const accelY = document.getElementById("accel-y");
-      const accelZ = document.getElementById("accel-z");
-      const gyroX = document.getElementById("gyro-x");
-      const gyroY = document.getElementById("gyro-y");
-      const gyroZ = document.getElementById("gyro-z");
+        // Get DOM elements (only once)
+        const accelX = document.getElementById("accel-x");
+        const accelY = document.getElementById("accel-y");
+        const accelZ = document.getElementById("accel-z");
+        const gyroX = document.getElementById("gyro-x");
+        const gyroY = document.getElementById("gyro-y");
+        const gyroZ = document.getElementById("gyro-z");
 
-      console.log("[DEBUG] Elements exist?", {
-        "accel-x": !!accelX,
-        "accel-y": !!accelY,
-        "accel-z": !!accelZ,
-        "gyro-x": !!gyroX,
-        "gyro-y": !!gyroY,
-        "gyro-z": !!gyroZ,
-      });
+        console.log("[DEBUG] DOM elements found:", {
+          "accel-x": !!accelX,
+          "accel-y": !!accelY,
+          "accel-z": !!accelZ,
+          "gyro-x": !!gyroX,
+          "gyro-y": !!gyroY,
+          "gyro-z": !!gyroZ,
+        });
 
-      if (data.sensor_data.accelerometer) {
-        const ax = data.sensor_data.accelerometer.x;
-        const ay = data.sensor_data.accelerometer.y;
-        const az = data.sensor_data.accelerometer.z;
-        console.log("[DEBUG] Accelerometer values:", { x: ax, y: ay, z: az });
+        // Update accelerometer values
+        if (data.sensor_data.accelerometer) {
+          const ax = data.sensor_data.accelerometer.x;
+          const ay = data.sensor_data.accelerometer.y;
+          const az = data.sensor_data.accelerometer.z;
+          console.log("[DEBUG] Accelerometer values to display:", {
+            x: ax,
+            y: ay,
+            z: az,
+          });
 
-        if (accelX)
-          accelX.textContent = typeof ax === "number" ? ax.toFixed(2) : 0;
-        if (accelY)
-          accelY.textContent = typeof ay === "number" ? ay.toFixed(2) : 0;
-        if (accelZ)
-          accelZ.textContent = typeof az === "number" ? az.toFixed(2) : 0;
+          // Update DOM directly with error handling
+          try {
+            if (accelX)
+              accelX.textContent = typeof ax === "number" ? ax.toFixed(2) : 0;
+            if (accelY)
+              accelY.textContent = typeof ay === "number" ? ay.toFixed(2) : 0;
+            if (accelZ)
+              accelZ.textContent = typeof az === "number" ? az.toFixed(2) : 0;
+          } catch (err) {
+            console.error("[DEBUG] Error updating accelerometer values:", err);
+          }
+        }
+
+        // Update gyroscope values
+        if (data.sensor_data.gyroscope) {
+          const gx = data.sensor_data.gyroscope.x;
+          const gy = data.sensor_data.gyroscope.y;
+          const gz = data.sensor_data.gyroscope.z;
+          console.log("[DEBUG] Gyroscope values to display:", {
+            x: gx,
+            y: gy,
+            z: gz,
+          });
+
+          // Update DOM directly with error handling
+          try {
+            if (gyroX)
+              gyroX.textContent = typeof gx === "number" ? gx.toFixed(2) : 0;
+            if (gyroY)
+              gyroY.textContent = typeof gy === "number" ? gy.toFixed(2) : 0;
+            if (gyroZ)
+              gyroZ.textContent = typeof gz === "number" ? gz.toFixed(2) : 0;
+          } catch (err) {
+            console.error("[DEBUG] Error updating gyroscope values:", err);
+          }
+        }
       }
 
-      if (data.sensor_data.gyroscope) {
-        const gx = data.sensor_data.gyroscope.x;
-        const gy = data.sensor_data.gyroscope.y;
-        const gz = data.sensor_data.gyroscope.z;
-        console.log("[DEBUG] Gyroscope values:", { x: gx, y: gy, z: gz });
-
-        if (gyroX)
-          gyroX.textContent = typeof gx === "number" ? gx.toFixed(2) : 0;
-        if (gyroY)
-          gyroY.textContent = typeof gy === "number" ? gy.toFixed(2) : 0;
-        if (gyroZ)
-          gyroZ.textContent = typeof gz === "number" ? gz.toFixed(2) : 0;
+      // Update OBD data
+      if (data.obd_data) {
+        this.updateOBDDisplay(data.obd_data);
       }
-    }
 
-    // Update OBD data
-    if (data.obd_data) {
-      this.updateOBDDisplay(data.obd_data);
-    }
+      // Update system status
+      if (data.system_health) {
+        this.updateSystemStatus(data.system_health);
+      }
 
-    // Update system status
-    if (data.system_health) {
-      this.updateSystemStatus(data.system_health);
-    }
-
-    // Update behavior status
-    if (data.behavior) {
-      this.updateBehaviorStatus(data.behavior);
+      // Update behavior status
+      if (data.behavior) {
+        this.updateBehaviorStatus(data.behavior);
+      }
+    } catch (error) {
+      console.error("[DEBUG] Error in updateRealTimeData:", error);
     }
   }
 
