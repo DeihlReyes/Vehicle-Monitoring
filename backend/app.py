@@ -552,6 +552,9 @@ async def broadcast_sensor_data():
                 'behavior_summary': behavior_summary
             }
 
+            # Debug: print the sensor data being sent
+            print("[DEBUG] Broadcasting sensor_data:", json.dumps(sensor_data))
+
             # Only broadcast if behavior is not 'rider_stopped', or if the last event was not 'rider_stopped'
             should_broadcast = False
             if behavior['event'] != 'rider_stopped':

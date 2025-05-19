@@ -93,14 +93,14 @@ class App {
 
   async initializeApp() {
     try {
-      // First, initialize charts
+      // Only initialize charts if window.charts exists and is needed for other tabs
       if (
         window.charts &&
         typeof window.charts.initializeCharts === "function"
       ) {
         await window.charts.initializeCharts();
       } else {
-        console.error("Charts module not loaded properly");
+        console.log("Charts module not loaded, skipping chart initialization");
       }
 
       // Then setup other components
