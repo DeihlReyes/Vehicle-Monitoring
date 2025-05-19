@@ -43,6 +43,12 @@ const gyroscopeData = {
   time: Array(20).fill(""),
 };
 
+// Helper function to check if a chart exists and is properly initialized
+function chartExists(elementId) {
+  const element = document.getElementById(elementId);
+  return element && element.data && element._fullLayout;
+}
+
 // Initialize behavior chart
 function initBehaviorChart() {
   console.log("Initializing behavior chart...");
@@ -57,6 +63,12 @@ function initBehaviorChart() {
         "Cannot find behavior chart element with ID 'behavior-distribution'"
       );
       return false;
+    }
+
+    // If a chart already exists on this element, purge it first to avoid conflicts
+    if (behaviorChartElement._fullLayout) {
+      Plotly.purge(behaviorChartElement);
+      console.log("Purged existing behavior chart");
     }
 
     // Initial data for all behavior types
@@ -109,9 +121,26 @@ function initBehaviorChart() {
       paper_bgcolor: "rgba(0,0,0,0)",
     };
 
-    Plotly.newPlot("behavior-distribution", data, layout, chartConfig);
-    console.log("Behavior chart initialized successfully");
-    return true;
+    // Create the plot and wait for it to complete
+    return new Promise((resolve) => {
+      Plotly.newPlot("behavior-distribution", data, layout, chartConfig)
+        .then(() => {
+          console.log("Behavior chart initialized successfully");
+          // Wait a moment to ensure chart is fully rendered
+          setTimeout(() => {
+            if (chartExists("behavior-distribution")) {
+              resolve(true);
+            } else {
+              console.error("Chart initialized but not properly loaded in DOM");
+              resolve(false);
+            }
+          }, 200);
+        })
+        .catch((error) => {
+          console.error("Error in Plotly.newPlot:", error);
+          resolve(false);
+        });
+    });
   } catch (error) {
     console.error("Error initializing behavior chart:", error);
     return false;
@@ -277,6 +306,17 @@ function initGyroscopeChart() {
 // Update behavior chart with new percentages
 function updateBehaviorChart(percentages) {
   try {
+    if (!chartsInitialized) {
+      console.warn("Charts not initialized, skipping behavior chart update");
+      return;
+    }
+
+    // Check if chart exists in DOM with proper Plotly initialization
+    if (!chartExists("behavior-distribution")) {
+      console.warn("Behavior chart not properly initialized, cannot update");
+      return;
+    }
+
     const values = [
       percentages.aggressive_acceleration,
       percentages.normal_acceleration,
@@ -290,8 +330,12 @@ function updateBehaviorChart(percentages) {
       values: [values],
     };
 
-    Plotly.update("behavior-distribution", update);
-    console.log("Behavior chart updated with new values:", values);
+    try {
+      Plotly.update("behavior-distribution", update);
+      console.log("Behavior chart updated with new values:", values);
+    } catch (error) {
+      console.error("Error in Plotly.update:", error);
+    }
   } catch (error) {
     console.error("Error updating behavior chart:", error);
   }
@@ -376,59 +420,80 @@ function updateGyroscopeChart(x, y, z) {
 // Handle window resize
 function handleResize() {
   if (chartsInitialized) {
-    Plotly.relayout("behavior-distribution", {
-      "xaxis.autorange": true,
-      "yaxis.autorange": true,
-    });
-
-    // No longer handling accelerometer or gyroscope charts
+    // Check if behavior chart exists before trying to relayout
+    if (chartExists("behavior-distribution")) {
+      try {
+        Plotly.relayout("behavior-distribution", {
+          autosize: true,
+        });
+        console.log("Chart relayout complete");
+      } catch (error) {
+        console.error("Error resizing behavior chart:", error);
+      }
+    } else {
+      console.warn("Cannot resize behavior chart - not properly initialized");
+    }
   }
 }
 
 // Initialize all charts
-function initializeCharts() {
+async function initializeCharts() {
   console.log("Initializing charts...");
 
   // Give the DOM a moment to fully render
-  setTimeout(() => {
-    const behaviorSuccess = initBehaviorChart();
+  return new Promise((resolve) => {
+    setTimeout(async () => {
+      try {
+        // Initialize behavior chart and await the result
+        const behaviorSuccess = await initBehaviorChart();
 
-    // Only initialize behavior chart, not accelerometer or gyroscope charts
-    chartsInitialized = behaviorSuccess;
+        // Set the charts initialized flag
+        chartsInitialized = behaviorSuccess;
 
-    if (chartsInitialized) {
-      console.log("Charts initialized successfully");
+        if (chartsInitialized) {
+          console.log("Charts initialized successfully");
 
-      // Set up event listeners
-      window.addEventListener("resize", handleResize);
+          // Set up event listeners
+          window.addEventListener("resize", handleResize);
 
-      // Set up tab switching to redraw charts
-      const tabElements = document.querySelectorAll('[data-bs-toggle="tab"]');
-      tabElements.forEach((tabElement) => {
-        tabElement.addEventListener("shown.bs.tab", (event) => {
-          handleResize();
-        });
-      });
+          // Initial behavior chart data
+          updateBehaviorChart({
+            aggressive_acceleration: 0,
+            normal_acceleration: 0,
+            aggressive_deceleration: 0,
+            normal_deceleration: 0,
+            aggressive_lane_change: 0,
+            normal_lane_change: 0,
+          });
 
-      // Initial behavior chart data
-      updateBehaviorChart({
-        aggressive_acceleration: 0,
-        normal_acceleration: 0,
-        aggressive_deceleration: 0,
-        normal_deceleration: 0,
-        aggressive_lane_change: 0,
-        normal_lane_change: 0,
-      });
-    } else {
-      console.error("Failed to initialize charts");
-    }
-  }, 500);
+          resolve(true);
+        } else {
+          console.error("Failed to initialize charts");
+          resolve(false);
+        }
+      } catch (error) {
+        console.error("Error during chart initialization:", error);
+        chartsInitialized = false;
+        resolve(false);
+      }
+    }, 800); // Increased timeout to ensure DOM is fully ready
+  });
 }
 
 // Initialize charts when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("DOM loaded, initializing charts...");
-  initializeCharts();
+  console.log("DOM loaded, preparing to initialize charts...");
+
+  // Wait a moment to ensure all scripts are fully loaded
+  setTimeout(async () => {
+    try {
+      console.log("Starting chart initialization");
+      const success = await initializeCharts();
+      console.log("Chart initialization complete, success:", success);
+    } catch (error) {
+      console.error("Error in charts initialization:", error);
+    }
+  }, 300);
 });
 
 // Export chart update functions
