@@ -220,20 +220,41 @@ class App {
 
   async loadAndRenderAllEvents() {
     const container = document.getElementById("all-events-list");
-    if (!container) return;
+    if (!container) {
+      console.error("[Events] #all-events-list container not found");
+      return;
+    }
     container.innerHTML = '<div class="loading">Loading events...</div>';
     try {
+      console.log("[Events] Fetching /events/all ...");
       const response = await fetch("/events/all");
+      console.log("[Events] Fetch response status:", response.status);
+      if (!response.ok) {
+        console.error("[Events] Fetch failed with status:", response.status);
+        container.innerHTML =
+          '<div class="error">Failed to load events (status ' +
+          response.status +
+          ").</div>";
+        return;
+      }
       const events = await response.json();
+      console.log("[Events] Events data received:", events);
       this.renderAllEvents(events);
     } catch (e) {
+      console.error("[Events] Exception while loading events:", e);
       container.innerHTML = '<div class="error">Failed to load events.</div>';
     }
   }
 
   renderAllEvents(events) {
     const container = document.getElementById("all-events-list");
-    if (!container) return;
+    if (!container) {
+      console.error(
+        "[Events] #all-events-list container not found in renderAllEvents"
+      );
+      return;
+    }
+    console.log("[Events] Rendering events:", events);
     if (!Array.isArray(events) || events.length === 0) {
       container.innerHTML = '<div class="empty">No events found.</div>';
       return;
@@ -276,20 +297,26 @@ class App {
     // Update motion data values
     if (data.sensor_data) {
       if (data.sensor_data.accelerometer) {
+        const ax = data.sensor_data.accelerometer.x;
+        const ay = data.sensor_data.accelerometer.y;
+        const az = data.sensor_data.accelerometer.z;
         document.getElementById("accel-x").textContent =
-          data.sensor_data.accelerometer.x?.toFixed(2) ?? 0;
+          typeof ax === "number" ? ax.toFixed(2) : 0;
         document.getElementById("accel-y").textContent =
-          data.sensor_data.accelerometer.y?.toFixed(2) ?? 0;
+          typeof ay === "number" ? ay.toFixed(2) : 0;
         document.getElementById("accel-z").textContent =
-          data.sensor_data.accelerometer.z?.toFixed(2) ?? 0;
+          typeof az === "number" ? az.toFixed(2) : 0;
       }
       if (data.sensor_data.gyroscope) {
+        const gx = data.sensor_data.gyroscope.x;
+        const gy = data.sensor_data.gyroscope.y;
+        const gz = data.sensor_data.gyroscope.z;
         document.getElementById("gyro-x").textContent =
-          data.sensor_data.gyroscope.x?.toFixed(2) ?? 0;
+          typeof gx === "number" ? gx.toFixed(2) : 0;
         document.getElementById("gyro-y").textContent =
-          data.sensor_data.gyroscope.y?.toFixed(2) ?? 0;
+          typeof gy === "number" ? gy.toFixed(2) : 0;
         document.getElementById("gyro-z").textContent =
-          data.sensor_data.gyroscope.z?.toFixed(2) ?? 0;
+          typeof gz === "number" ? gz.toFixed(2) : 0;
       }
     }
 
