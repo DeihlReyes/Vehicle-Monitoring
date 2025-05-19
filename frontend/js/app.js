@@ -149,6 +149,11 @@ class App {
         this.loadAndRenderLogs();
       }
 
+      // If events tab, load all events
+      if (tabId === "events") {
+        this.loadAndRenderAllEvents();
+      }
+
       // Trigger resize event for charts
       if (window.charts && typeof window.charts.handleResize === "function") {
         setTimeout(() => window.charts.handleResize(), 100);
@@ -211,6 +216,60 @@ class App {
   async loadAndRenderLogs() {
     // No HTTP fetches; logs must be sent via WebSocket if needed.
     return;
+  }
+
+  async loadAndRenderAllEvents() {
+    const container = document.getElementById("all-events-list");
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Loading events...</div>';
+    try {
+      const response = await fetch("/events/all");
+      const events = await response.json();
+      this.renderAllEvents(events);
+    } catch (e) {
+      container.innerHTML = '<div class="error">Failed to load events.</div>';
+    }
+  }
+
+  renderAllEvents(events) {
+    const container = document.getElementById("all-events-list");
+    if (!container) return;
+    if (!Array.isArray(events) || events.length === 0) {
+      container.innerHTML = '<div class="empty">No events found.</div>';
+      return;
+    }
+    container.innerHTML = events
+      .map((event) => {
+        // Format time
+        const time = event.timestamp
+          ? new Date(event.timestamp).toLocaleString()
+          : "-";
+        // Format type
+        let eventType = event.behavior_type || "Unknown";
+        if (eventType.includes("_")) {
+          eventType = eventType
+            .split("_")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ");
+        } else {
+          eventType = eventType.charAt(0).toUpperCase() + eventType.slice(1);
+        }
+        // Badge color
+        const isAggressive = (event.behavior_type || "").includes("aggressive");
+        // Confidence
+        const conf =
+          event.confidence !== undefined
+            ? `Conf: ${(event.confidence * 100).toFixed(0)}%`
+            : "";
+        return `<div class="event-row">
+          <span class="event-badge ${
+            isAggressive ? "aggressive" : "normal"
+          }">${eventType}</span>
+          <span class="event-time">${time}</span>
+          <span class="event-confidence">${conf}</span>
+        </div>`;
+      })
+      .join("");
   }
 
   updateRealTimeData(data) {

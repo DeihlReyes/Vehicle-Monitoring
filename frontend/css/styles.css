@@ -496,3 +496,61 @@ h3 {
   font-size: 1.6rem;
   margin-left: 0.5rem;
 }
+
+.events-container {
+  padding: 15px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  font-size: 1rem;
+}
+.event-badge {
+  display: inline-block;
+  min-width: 120px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: bold;
+  text-align: center;
+  margin-right: 10px;
+}
+.event-badge.aggressive {
+  background: #ffebee;
+  color: #d32f2f;
+}
+.event-badge.normal {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.event-time {
+  color: #6c757d;
+  font-size: 0.95em;
+  margin-right: 10px;
+  min-width: 140px;
+  text-align: right;
+}
+.event-confidence {
+  color: #007bff;
+  font-size: 0.95em;
+  min-width: 80px;
+  text-align: right;
+}
+.loading,
+.empty,
+.error {
+  text-align: center;
+  color: #888;
+  padding: 20px 0;
+  font-size: 1.1em;
+}
+.error {
+  color: #d32f2f;
+}

@@ -358,4 +358,18 @@ class DatabaseManager:
                 return None
         except Exception as e:
             logger.error(f"Failed to get last open session: {str(e)}")
-            return None 
+            return None
+
+    def get_all_behavior_events(self, limit: int = 200) -> list:
+        """Fetch all behavior events, most recent first, with optional limit."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM behavior_events ORDER BY timestamp DESC LIMIT ?",
+                    (limit,)
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to fetch all behavior events: {str(e)}")
+            return [] 

@@ -756,5 +756,16 @@ async def get_logs():
         logger.error(f"Failed to get logs: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/events/all')
+async def get_all_events():
+    """Return all behavior events, most recent first, with optional limit (default 200)."""
+    try:
+        limit = int((await app.request.args.get('limit', 200)))
+        events = db_manager.get_all_behavior_events(limit=limit)
+        return jsonify(events)
+    except Exception as e:
+        logger.error(f"Failed to get all events: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8000)
