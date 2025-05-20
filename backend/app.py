@@ -373,7 +373,6 @@ async def broadcast_sensor_data():
         logger.error(f"Failed to get or create singleton session: {str(e)}")
         current_session_id = None
 
-    last_behavior_event = None
     while True:
         if not connected_clients:
             await asyncio.sleep(0.1)
@@ -382,6 +381,7 @@ async def broadcast_sensor_data():
         try:
             sensor_data = None
             obd_data = {}
+            current_speed = 0
             
             # Get MPU6050 data with improved error handling
             if mpu_sensor and mpu_sensor.is_initialized:
@@ -416,30 +416,16 @@ async def broadcast_sensor_data():
                             sensor_data['accelerometer'],
                             sensor_data['gyroscope']
                         )
-                    # Get speed from OBD data (in m/s)
-                    speed_kph = None
-                    if obd_interface and obd_interface.is_connected():
-                        try:
-                            raw_obd_data = obd_interface.get_data()
-                            speed_kph = raw_obd_data.get('SPEED')
-                        except Exception as e:
-                            logger.error(f"Error getting OBD data for speed: {str(e)}")
-                    speed_mps = speed_kph * 1000 / 3600 if speed_kph is not None else 0.0
-                    # Add data to behavior predictor for real-time prediction
-                    behavior_predictor.add_data_point(sensor_data['accelerometer'], sensor_data['gyroscope'], speed_mps)
                 except Exception as e:
                     logger.error(f"Error getting MPU6050 data: {str(e)}")
                     success = await handle_hardware_error("MPU6050", e)
                     if not success:
-                        # If recovery failed, update system health and use default values
                         await update_system_health("hardware", f"MPU6050 recovery failed: {str(e)}")
-                    # Use default values regardless of recovery success to keep the app running
                     sensor_data = {
                         'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0},
                         'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
                     }
             else:
-                # No MPU sensor available or not initialized
                 if mpu_sensor and not mpu_sensor.is_initialized:
                     logger.warning("MPU6050 is not initialized, attempting to initialize...")
                     try:
@@ -456,6 +442,7 @@ async def broadcast_sensor_data():
             if obd_interface and obd_interface.is_connected():
                 try:
                     raw_obd_data = obd_interface.get_data()
+                    current_speed = raw_obd_data.get('SPEED', 0)
                     
                     if current_session_id:
                         db_manager.store_obd_data(current_session_id, raw_obd_data)
@@ -463,26 +450,21 @@ async def broadcast_sensor_data():
                     logger.error(f"Error getting OBD data: {str(e)}")
                     success = await handle_hardware_error("OBD", e)
                     if not success:
-                        # If recovery failed, update system health
                         await update_system_health("hardware", f"OBD recovery failed: {str(e)}")
-                    
-                    # Use empty dictionary regardless of recovery success to keep the app running
                     raw_obd_data = {}
             else:
-                # No OBD interface available or not connected
                 if obd_interface and not obd_interface.is_connected():
                     logger.warning("OBD interface is not connected, attempting to connect...")
                     try:
                         obd_interface.connect()
                     except Exception as e:
                         logger.error(f"Failed to connect to OBD: {str(e)}")
-                
                 raw_obd_data = {}
             
             # Format OBD data for frontend
             obd_data = {
                 'rpm': raw_obd_data.get('RPM'),
-                'speed': raw_obd_data.get('SPEED'),
+                'speed': current_speed,
                 'throttle': raw_obd_data.get('THROTTLE_POS'),
                 'engineLoad': raw_obd_data.get('ENGINE_LOAD'),
                 'coolant': raw_obd_data.get('COOLANT_TEMP'),
@@ -490,25 +472,32 @@ async def broadcast_sensor_data():
                 'intake': raw_obd_data.get('INTAKE_PRESSURE')
             }
 
-            # Get behavior prediction with error handling
-            try:
-                behavior_data = behavior_predictor.get_latest_prediction()
-                # Format behavior data for frontend
+            # Only predict behavior if speed is not zero
+            if current_speed > 0 and sensor_data:
+                speed_mps = current_speed * 1000 / 3600
+                behavior_predictor.add_data_point(sensor_data['accelerometer'], sensor_data['gyroscope'], speed_mps)
+                try:
+                    behavior_data = behavior_predictor.get_latest_prediction()
+                    behavior = {
+                        'event': behavior_data.get('behavior', 'normal_driving'),
+                        'confidence': behavior_data.get('confidence', 0.95),
+                        'timestamp': behavior_data.get('timestamp', datetime.now().timestamp())
+                    }
+                    
+                    if current_session_id and behavior['event'].startswith('aggressive'):
+                        db_manager.store_behavior_event(current_session_id, behavior['event'])
+                except Exception as e:
+                    logger.error(f"Behavior prediction error: {str(e)}")
+                    await update_system_health("data", str(e))
+                    behavior = {
+                        'event': 'normal_driving',
+                        'confidence': 0.95,
+                        'timestamp': datetime.now().timestamp()
+                    }
+            else:
                 behavior = {
-                    'event': behavior_data.get('behavior', 'normal_driving'),
-                    'confidence': behavior_data.get('confidence', 0.95),
-                    'timestamp': behavior_data.get('timestamp', datetime.now().timestamp())
-                }
-                
-                if current_session_id and behavior['event'].startswith('aggressive'):
-                    # Store aggressive behavior events
-                    db_manager.store_behavior_event(current_session_id, behavior['event'])
-            except Exception as e:
-                logger.error(f"Behavior prediction error: {str(e)}")
-                await update_system_health("data", str(e))
-                behavior = {
-                    'event': 'normal_driving',
-                    'confidence': 0.95,
+                    'event': 'rider_stopped',
+                    'confidence': 1.0,
                     'timestamp': datetime.now().timestamp()
                 }
 
@@ -552,24 +541,15 @@ async def broadcast_sensor_data():
                 'behavior_summary': behavior_summary
             }
 
-            # Only broadcast if behavior is not 'rider_stopped', or if the last event was not 'rider_stopped'
-            should_broadcast = False
-            if behavior['event'] != 'rider_stopped':
-                should_broadcast = True
-            elif last_behavior_event != 'rider_stopped':
-                should_broadcast = True
-            # else: suppress repeated 'rider_stopped' broadcasts
-
-            if should_broadcast:
-                disconnected_clients = set()
-                for client in connected_clients:
-                    try:
-                        await client.send(json.dumps(data))
-                    except Exception as e:
-                        logger.error(f"Error sending to client: {str(e)}")
-                        disconnected_clients.add(client)
-                connected_clients.difference_update(disconnected_clients)
-                last_behavior_event = behavior['event']
+            # Always broadcast data, regardless of behavior state
+            disconnected_clients = set()
+            for client in connected_clients:
+                try:
+                    await client.send(json.dumps(data))
+                except Exception as e:
+                    logger.error(f"Error sending to client: {str(e)}")
+                    disconnected_clients.add(client)
+            connected_clients.difference_update(disconnected_clients)
 
         except Exception as e:
             logger.error(f"Critical error in broadcast loop: {str(e)}")
