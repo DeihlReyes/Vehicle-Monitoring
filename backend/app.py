@@ -472,10 +472,13 @@ def get_or_create_singleton_session():
         conn.commit()
         return cursor.lastrowid
 
+last_sent_data = None
+last_behavior_summary = None
+last_broadcast_time = 0
+
 async def broadcast_sensor_data():
-    global current_session_id, mpu_sensor, obd_interface
+    global current_session_id, mpu_sensor, obd_interface, last_sent_data, last_behavior_summary, last_broadcast_time
     
-    # Always use the singleton session
     try:
         current_session_id = get_or_create_singleton_session()
         logger.info(f"Using singleton session with ID: {current_session_id}")
@@ -483,21 +486,31 @@ async def broadcast_sensor_data():
         logger.error(f"Failed to get or create singleton session: {str(e)}")
         current_session_id = None
 
+    behavior_summary_cache = None
+    behavior_summary_cache_time = 0
+    behavior_summary_cache_interval = 1.0  # seconds
+    last_sensor_data = None
+    last_obd_data = None
+    last_behavior = None
+    batch_sensor_data = []
+    batch_obd_data = []
+    batch_write_interval = 1.0  # seconds
+    last_batch_write_time = time.time()
+
     while True:
         if not connected_clients:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
             continue
 
         try:
             sensor_data = None
             obd_data = {}
             current_speed = 0
-            
-            # Get MPU6050 data with improved error handling
+            now = time.time()
+            # Get MPU6050 data
             if mpu_sensor and mpu_sensor.is_initialized:
                 try:
                     raw_sensor_data = mpu_sensor.get_data()
-                    # Calculate absolute acceleration and gyroscope if not present
                     acc = raw_sensor_data['accelerometer']
                     gyro = raw_sensor_data['gyroscope']
                     abs_acc = acc.get('absolute')
@@ -521,11 +534,7 @@ async def broadcast_sensor_data():
                         }
                     }
                     if current_session_id:
-                        db_manager.store_sensor_data(
-                            current_session_id,
-                            sensor_data['accelerometer'],
-                            sensor_data['gyroscope']
-                        )
+                        batch_sensor_data.append((current_session_id, sensor_data['accelerometer'], sensor_data['gyroscope']))
                 except Exception as e:
                     logger.error(f"Error getting MPU6050 data: {str(e)}")
                     success = await handle_hardware_error("MPU6050", e)
@@ -546,16 +555,14 @@ async def broadcast_sensor_data():
                     'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0},
                     'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
                 }
-            
-            # Get OBD data with improved error handling
+            # Get OBD data
             raw_obd_data = {}
             if obd_interface and obd_interface.is_connected():
                 try:
                     raw_obd_data = obd_interface.get_data()
                     current_speed = raw_obd_data.get('SPEED', 0)
-                    
                     if current_session_id:
-                        db_manager.store_obd_data(current_session_id, raw_obd_data)
+                        batch_obd_data.append((current_session_id, raw_obd_data))
                 except Exception as e:
                     logger.error(f"Error getting OBD data: {str(e)}")
                     success = await handle_hardware_error("OBD", e)
@@ -570,8 +577,6 @@ async def broadcast_sensor_data():
                     except Exception as e:
                         logger.error(f"Failed to connect to OBD: {str(e)}")
                 raw_obd_data = {}
-            
-            # Format OBD data for frontend
             obd_data = {
                 'rpm': raw_obd_data.get('RPM'),
                 'speed': current_speed,
@@ -581,7 +586,6 @@ async def broadcast_sensor_data():
                 'battery': raw_obd_data.get('CONTROL_MODULE_VOLTAGE'),
                 'intake': raw_obd_data.get('INTAKE_PRESSURE')
             }
-
             # Only predict behavior if speed is not zero
             if current_speed > 0 and sensor_data:
                 speed_mps = current_speed * 1000 / 3600
@@ -593,7 +597,6 @@ async def broadcast_sensor_data():
                         'confidence': behavior_data.get('confidence', 0.95),
                         'timestamp': behavior_data.get('timestamp', datetime.now().timestamp())
                     }
-                    
                     if current_session_id and behavior['event'].startswith('aggressive'):
                         db_manager.store_behavior_event(current_session_id, behavior['event'])
                 except Exception as e:
@@ -610,9 +613,33 @@ async def broadcast_sensor_data():
                     'confidence': 1.0,
                     'timestamp': datetime.now().timestamp()
                 }
-
-            # Calculate behavior summary for the singleton session
-            behavior_summary = {
+            # Cache behavior summary
+            if now - behavior_summary_cache_time > behavior_summary_cache_interval:
+                try:
+                    with db_manager.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT behavior_type, COUNT(*) as count
+                            FROM behavior_events
+                            WHERE session_id = ?
+                            GROUP BY behavior_type
+                        """, (current_session_id,))
+                        rows = cursor.fetchall()
+                        behavior_summary_cache = {
+                            'aggressive_acceleration': 0,
+                            'normal_acceleration': 0,
+                            'aggressive_deceleration': 0,
+                            'normal_deceleration': 0,
+                            'aggressive_lane_change': 0,
+                            'normal_lane_change': 0
+                        }
+                        for row in rows:
+                            if row['behavior_type'] in behavior_summary_cache:
+                                behavior_summary_cache[row['behavior_type']] = row['count']
+                    behavior_summary_cache_time = now
+                except Exception as e:
+                    logger.error(f"Failed to calculate behavior summary: {str(e)}")
+            behavior_summary = behavior_summary_cache or {
                 'aggressive_acceleration': 0,
                 'normal_acceleration': 0,
                 'aggressive_deceleration': 0,
@@ -620,22 +647,37 @@ async def broadcast_sensor_data():
                 'aggressive_lane_change': 0,
                 'normal_lane_change': 0
             }
-            try:
-                with db_manager.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT behavior_type, COUNT(*) as count
-                        FROM behavior_events
-                        WHERE session_id = ?
-                        GROUP BY behavior_type
-                    """, (current_session_id,))
-                    rows = cursor.fetchall()
-                    for row in rows:
-                        if row['behavior_type'] in behavior_summary:
-                            behavior_summary[row['behavior_type']] = row['count']
-            except Exception as e:
-                logger.error(f"Failed to calculate behavior summary: {str(e)}")
-
+            # Batch write sensor/OBD data
+            if now - last_batch_write_time > batch_write_interval:
+                if batch_sensor_data:
+                    try:
+                        for sess_id, accel, gyro in batch_sensor_data:
+                            db_manager.store_sensor_data(sess_id, accel, gyro)
+                        batch_sensor_data.clear()
+                    except Exception as e:
+                        logger.error(f"Batch sensor data write error: {str(e)}")
+                if batch_obd_data:
+                    try:
+                        for sess_id, obd in batch_obd_data:
+                            db_manager.store_obd_data(sess_id, obd)
+                        batch_obd_data.clear()
+                    except Exception as e:
+                        logger.error(f"Batch OBD data write error: {str(e)}")
+                last_batch_write_time = now
+            # Only send if data changed significantly
+            def has_significant_change(a, b):
+                if a is None or b is None:
+                    return True
+                # Compare sensor, OBD, and behavior
+                try:
+                    return (
+                        abs(a['sensor_data']['accelerometer']['absolute'] - b['sensor_data']['accelerometer']['absolute']) > 0.05 or
+                        abs(a['sensor_data']['gyroscope']['absolute'] - b['sensor_data']['gyroscope']['absolute']) > 0.5 or
+                        abs(a['obd_data']['speed'] - b['obd_data']['speed']) > 0.5 or
+                        a['behavior']['event'] != b['behavior']['event']
+                    )
+                except Exception:
+                    return True
             data = {
                 'timestamp': datetime.now().isoformat(),
                 'sensor_data': sensor_data,
@@ -650,22 +692,20 @@ async def broadcast_sensor_data():
                 },
                 'behavior_summary': behavior_summary
             }
-
-            # Always broadcast data, regardless of behavior state
-            disconnected_clients = set()
-            for client in connected_clients:
-                try:
-                    await client.send(json.dumps(data))
-                except Exception as e:
-                    logger.error(f"Error sending to client: {str(e)}")
-                    disconnected_clients.add(client)
-            connected_clients.difference_update(disconnected_clients)
-
+            if has_significant_change(data, last_sent_data):
+                disconnected_clients = set()
+                for client in connected_clients:
+                    try:
+                        await client.send(json.dumps(data))
+                    except Exception as e:
+                        logger.error(f"Error sending to client: {str(e)}")
+                        disconnected_clients.add(client)
+                connected_clients.difference_update(disconnected_clients)
+                last_sent_data = data
         except Exception as e:
             logger.error(f"Critical error in broadcast loop: {str(e)}")
             await update_system_health("data", str(e))
-
-        await asyncio.sleep(0.1)  # 100ms interval
+        await asyncio.sleep(0.2)  # 200ms interval
 
 @app.websocket('/ws')
 async def ws():
