@@ -593,9 +593,13 @@ async def broadcast_sensor_data():
                         'confidence': behavior_data.get('confidence', 0.95),
                         'timestamp': behavior_data.get('timestamp', datetime.now().timestamp())
                     }
-                    
-                    if current_session_id and behavior['event'].startswith('aggressive'):
-                        db_manager.store_behavior_event(current_session_id, behavior['event'])
+                    # Always store all behavior events, not just aggressive
+                    if current_session_id:
+                        db_manager.store_behavior_event(
+                            current_session_id,
+                            behavior['event'],
+                            behavior.get('confidence', 1.0)
+                        )
                 except Exception as e:
                     logger.error(f"Behavior prediction error: {str(e)}")
                     await update_system_health("data", str(e))
