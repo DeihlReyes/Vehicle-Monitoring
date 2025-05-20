@@ -1,12 +1,4 @@
 // WebSocket connection handler
-const DEBUG = false; // Set to true for development logging
-let lastUIUpdate = 0;
-const UI_UPDATE_INTERVAL = 200; // ms, 5Hz
-
-function safeLog(...args) {
-  if (DEBUG) console.log(...args);
-}
-
 class WebSocketHandler {
   constructor() {
     this.ws = null;
@@ -125,26 +117,15 @@ class WebSocketHandler {
 
   processWebSocketData(data) {
     try {
-      const now = Date.now();
-      // Only update UI at most 5 times per second
-      if (now - lastUIUpdate < UI_UPDATE_INTERVAL) return;
-      lastUIUpdate = now;
-      // Only update if values have changed
-      if (
-        this._lastData &&
-        JSON.stringify(this._lastData) === JSON.stringify(data)
-      )
-        return;
-      this._lastData = data;
       // Debug log the incoming data
-      safeLog("Received sensor data:", data.sensor_data);
+      console.log("Received sensor data:", data.sensor_data);
 
       // Update sensor data displays
       if (data.sensor_data) {
         const accel = data.sensor_data.accelerometer;
         const gyro = data.sensor_data.gyroscope;
-        safeLog("Accelerometer data:", accel);
-        safeLog("Gyroscope data:", gyro);
+        console.log("Accelerometer data:", accel);
+        console.log("Gyroscope data:", gyro);
 
         if (
           window.charts &&

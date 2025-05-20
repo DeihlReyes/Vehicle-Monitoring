@@ -28,14 +28,6 @@ const commonLayout = {
 // Charts initialization status
 let chartsInitialized = false;
 
-const DEBUG = false; // Set to true for development logging
-let lastBehaviorChartUpdate = 0;
-let lastBehaviorChartValues = null;
-
-function safeLog(...args) {
-  if (DEBUG) console.log(...args);
-}
-
 // Initialize behavior chart
 function initBehaviorChart() {
   console.log("Initializing behavior chart...");
@@ -114,8 +106,6 @@ function initBehaviorChart() {
 // Update behavior chart with new percentages
 function updateBehaviorChart(percentages) {
   try {
-    const now = Date.now();
-    if (now - lastBehaviorChartUpdate < 200) return;
     const values = [
       percentages.aggressive_acceleration,
       percentages.normal_acceleration,
@@ -124,18 +114,13 @@ function updateBehaviorChart(percentages) {
       percentages.aggressive_lane_change,
       percentages.normal_lane_change,
     ];
-    if (
-      lastBehaviorChartValues &&
-      JSON.stringify(values) === JSON.stringify(lastBehaviorChartValues)
-    )
-      return;
-    lastBehaviorChartValues = values;
-    lastBehaviorChartUpdate = now;
+
     const update = {
       values: [values],
     };
+
     Plotly.update("behavior-distribution", update);
-    safeLog("Behavior chart updated with new values:", values);
+    console.log("Behavior chart updated with new values:", values);
   } catch (error) {
     console.error("Error updating behavior chart:", error);
   }
@@ -144,7 +129,7 @@ function updateBehaviorChart(percentages) {
 // Update accelerometer display
 function updateAccelerometerDisplay(x, y, z) {
   try {
-    safeLog("Updating accelerometer display with values:", { x, y, z });
+    console.log("Updating accelerometer display with values:", { x, y, z });
     document.getElementById("accel-x").textContent = x.toFixed(2);
     document.getElementById("accel-y").textContent = y.toFixed(2);
     document.getElementById("accel-z").textContent = z.toFixed(2);
@@ -156,7 +141,7 @@ function updateAccelerometerDisplay(x, y, z) {
 // Update gyroscope display
 function updateGyroscopeDisplay(x, y, z) {
   try {
-    safeLog("Updating gyroscope display with values:", { x, y, z });
+    console.log("Updating gyroscope display with values:", { x, y, z });
     document.getElementById("gyro-x").textContent = x.toFixed(2);
     document.getElementById("gyro-y").textContent = y.toFixed(2);
     document.getElementById("gyro-z").textContent = z.toFixed(2);
