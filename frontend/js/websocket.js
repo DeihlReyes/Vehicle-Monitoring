@@ -111,35 +111,35 @@ class WebSocketHandler {
 
   processData(data) {
     try {
-      // Update sensor data for charts
+      // Debug log the incoming data
+      console.log("Received sensor data:", data.sensor_data);
+
+      // Update sensor data displays
       if (data.sensor_data) {
+        const accel = data.sensor_data.accelerometer;
+        const gyro = data.sensor_data.gyroscope;
+        console.log("Accelerometer data:", accel);
+        console.log("Gyroscope data:", gyro);
+
         if (
           window.charts &&
-          typeof window.charts.updateAccelerometerChart === "function"
+          typeof window.charts.updateAccelerometerDisplay === "function"
         ) {
-          window.charts.updateAccelerometerChart(
-            data.sensor_data.accelerometer.x,
-            data.sensor_data.accelerometer.y,
-            data.sensor_data.accelerometer.z
-          );
+          window.charts.updateAccelerometerDisplay(accel.x, accel.y, accel.z);
         } else {
           console.warn(
-            "Charts module or updateAccelerometerChart function not available"
+            "Charts module or updateAccelerometerDisplay function not available"
           );
         }
 
         if (
           window.charts &&
-          typeof window.charts.updateGyroscopeChart === "function"
+          typeof window.charts.updateGyroscopeDisplay === "function"
         ) {
-          window.charts.updateGyroscopeChart(
-            data.sensor_data.gyroscope.x,
-            data.sensor_data.gyroscope.y,
-            data.sensor_data.gyroscope.z
-          );
+          window.charts.updateGyroscopeDisplay(gyro.x, gyro.y, gyro.z);
         } else {
           console.warn(
-            "Charts module or updateGyroscopeChart function not available"
+            "Charts module or updateGyroscopeDisplay function not available"
           );
         }
       }

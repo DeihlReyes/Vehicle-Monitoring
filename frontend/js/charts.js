@@ -129,6 +129,7 @@ function updateBehaviorChart(percentages) {
 // Update accelerometer display
 function updateAccelerometerDisplay(x, y, z) {
   try {
+    console.log("Updating accelerometer display with values:", { x, y, z });
     document.getElementById("accel-x").textContent = x.toFixed(2);
     document.getElementById("accel-y").textContent = y.toFixed(2);
     document.getElementById("accel-z").textContent = z.toFixed(2);
@@ -140,6 +141,7 @@ function updateAccelerometerDisplay(x, y, z) {
 // Update gyroscope display
 function updateGyroscopeDisplay(x, y, z) {
   try {
+    console.log("Updating gyroscope display with values:", { x, y, z });
     document.getElementById("gyro-x").textContent = x.toFixed(2);
     document.getElementById("gyro-y").textContent = y.toFixed(2);
     document.getElementById("gyro-z").textContent = z.toFixed(2);
