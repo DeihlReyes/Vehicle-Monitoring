@@ -15,7 +15,53 @@ class WebSocketHandler {
       normal_lane_change: 0,
       recent_events: [],
     };
+    // Add performance optimization variables
+    this.lastProcessedData = null;
+    this.processingQueue = [];
+    this.isProcessing = false;
+    this.throttleTime = 50; // Throttle UI updates to 20fps (50ms)
+    this.lastUIUpdate = 0;
+    this.animationFrameId = null;
+
     this.initializeWebSocket();
+    this.setupPerformanceMonitoring();
+  }
+
+  setupPerformanceMonitoring() {
+    // Measure and report performance metrics
+    this.performanceMetrics = {
+      messageCount: 0,
+      processingTimes: [],
+      avgProcessingTime: 0,
+      maxProcessingTime: 0,
+      droppedFrames: 0,
+    };
+
+    // Start performance monitoring loop
+    setInterval(() => {
+      if (this.performanceMetrics.processingTimes.length > 0) {
+        const sum = this.performanceMetrics.processingTimes.reduce(
+          (a, b) => a + b,
+          0
+        );
+        this.performanceMetrics.avgProcessingTime =
+          sum / this.performanceMetrics.processingTimes.length;
+        console.log("WebSocket Performance:", {
+          messagesPerSecond: this.performanceMetrics.messageCount,
+          avgProcessingTime:
+            this.performanceMetrics.avgProcessingTime.toFixed(2) + "ms",
+          maxProcessingTime:
+            this.performanceMetrics.maxProcessingTime.toFixed(2) + "ms",
+          droppedFrames: this.performanceMetrics.droppedFrames,
+        });
+
+        // Reset metrics
+        this.performanceMetrics.messageCount = 0;
+        this.performanceMetrics.processingTimes = [];
+        this.performanceMetrics.maxProcessingTime = 0;
+        this.performanceMetrics.droppedFrames = 0;
+      }
+    }, 5000);
   }
 
   initializeWebSocket() {
@@ -55,9 +101,10 @@ class WebSocketHandler {
 
       this.ws.onmessage = (event) => {
         try {
+          // Optimization: Queue messages for processing to avoid UI blocking
           const data = JSON.parse(event.data);
-          console.log("Received WebSocket data:", data);
-          this.processWebSocketData(data);
+          this.queueDataForProcessing(data);
+          this.performanceMetrics.messageCount++;
         } catch (error) {
           console.error("Error processing WebSocket message:", error);
           console.log("Raw message data:", event.data);
@@ -67,6 +114,174 @@ class WebSocketHandler {
       console.error("Error initializing WebSocket:", error);
       this.attemptReconnect();
     }
+  }
+
+  queueDataForProcessing(data) {
+    // Add data to processing queue
+    this.processingQueue.push(data);
+
+    // If we're not already processing, start processing
+    if (!this.isProcessing) {
+      this.processQueuedData();
+    }
+  }
+
+  processQueuedData() {
+    // Mark as processing
+    this.isProcessing = true;
+
+    // Cancel any existing animation frame
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+
+    // Process data using requestAnimationFrame for better performance
+    this.animationFrameId = requestAnimationFrame(() => {
+      const startTime = performance.now();
+
+      // Only process the most recent data if we have a backlog
+      if (this.processingQueue.length > 3) {
+        // Keep the first item (oldest) and the last item (newest)
+        const oldestData = this.processingQueue[0];
+        const newestData =
+          this.processingQueue[this.processingQueue.length - 1];
+        this.processingQueue = [oldestData, newestData];
+        this.performanceMetrics.droppedFrames +=
+          this.processingQueue.length - 2;
+      }
+
+      // Process the next item in the queue
+      if (this.processingQueue.length > 0) {
+        const data = this.processingQueue.shift();
+
+        // Only update UI if enough time has passed since last update
+        const now = performance.now();
+        if (now - this.lastUIUpdate >= this.throttleTime) {
+          this.processWebSocketData(data);
+          this.lastUIUpdate = now;
+        }
+      }
+
+      // Record processing time
+      const processingTime = performance.now() - startTime;
+      this.performanceMetrics.processingTimes.push(processingTime);
+      this.performanceMetrics.maxProcessingTime = Math.max(
+        this.performanceMetrics.maxProcessingTime,
+        processingTime
+      );
+
+      // Continue processing if there are more items or stop if done
+      if (this.processingQueue.length > 0) {
+        this.animationFrameId = requestAnimationFrame(() =>
+          this.processQueuedData()
+        );
+      } else {
+        this.isProcessing = false;
+      }
+    });
+  }
+
+  processWebSocketData(data) {
+    try {
+      // Optimization: Skip processing if data hasn't changed significantly
+      if (
+        this.lastProcessedData &&
+        this.isDataSimilar(data, this.lastProcessedData)
+      ) {
+        return;
+      }
+
+      // Update sensor data displays
+      if (data.sensor_data) {
+        const accel = data.sensor_data.accelerometer;
+        const gyro = data.sensor_data.gyroscope;
+
+        if (
+          window.charts &&
+          typeof window.charts.updateAccelerometerDisplay === "function"
+        ) {
+          window.charts.updateAccelerometerDisplay(accel.x, accel.y, accel.z);
+        }
+
+        if (
+          window.charts &&
+          typeof window.charts.updateGyroscopeDisplay === "function"
+        ) {
+          window.charts.updateGyroscopeDisplay(gyro.x, gyro.y, gyro.z);
+        }
+      }
+
+      // Update behavior data - only if it has changed
+      if (
+        data.behavior &&
+        (!this.lastProcessedData ||
+          data.behavior.event !== this.lastProcessedData.behavior.event)
+      ) {
+        this.processBehaviorData(data.behavior);
+      }
+
+      // Update OBD metrics if available
+      if (data.obd_data) {
+        this.updateOBDMetrics(data.obd_data);
+      }
+
+      // Update system health
+      if (data.system_health) {
+        this.updateSystemHealth(data.system_health);
+      }
+
+      // Store last processed data for comparison
+      this.lastProcessedData = data;
+    } catch (error) {
+      console.error("Error processing data:", error);
+      this.logError("data", `Error processing data: ${error.message}`);
+    }
+  }
+
+  isDataSimilar(newData, oldData) {
+    // Check if sensor data is similar enough to skip update
+    if (newData.sensor_data && oldData.sensor_data) {
+      const newAccel = newData.sensor_data.accelerometer;
+      const oldAccel = oldData.sensor_data.accelerometer;
+      const newGyro = newData.sensor_data.gyroscope;
+      const oldGyro = oldData.sensor_data.gyroscope;
+
+      // Only update if values changed by more than threshold
+      const threshold = 0.05;
+      if (
+        Math.abs(newAccel.x - oldAccel.x) > threshold ||
+        Math.abs(newAccel.y - oldAccel.y) > threshold ||
+        Math.abs(newAccel.z - oldAccel.z) > threshold ||
+        Math.abs(newGyro.x - oldGyro.x) > threshold ||
+        Math.abs(newGyro.y - oldGyro.y) > threshold ||
+        Math.abs(newGyro.z - oldGyro.z) > threshold
+      ) {
+        return false;
+      }
+    }
+
+    // Check if OBD data is similar
+    if (newData.obd_data && oldData.obd_data) {
+      // Update if speed or RPM changed significantly
+      if (
+        Math.abs(
+          (newData.obd_data.speed || 0) - (oldData.obd_data.speed || 0)
+        ) > 1 ||
+        Math.abs((newData.obd_data.rpm || 0) - (oldData.obd_data.rpm || 0)) > 50
+      ) {
+        return false;
+      }
+    }
+
+    // Check if behavior changed
+    if (newData.behavior && oldData.behavior) {
+      if (newData.behavior.event !== oldData.behavior.event) {
+        return false;
+      }
+    }
+
+    // Data is similar enough to skip update
+    return true;
   }
 
   // System status tracking
@@ -113,61 +328,6 @@ class WebSocketHandler {
         this.initializeWebSocket();
       }
     }, delay);
-  }
-
-  processWebSocketData(data) {
-    try {
-      // Debug log the incoming data
-      console.log("Received sensor data:", data.sensor_data);
-
-      // Update sensor data displays
-      if (data.sensor_data) {
-        const accel = data.sensor_data.accelerometer;
-        const gyro = data.sensor_data.gyroscope;
-        console.log("Accelerometer data:", accel);
-        console.log("Gyroscope data:", gyro);
-
-        if (
-          window.charts &&
-          typeof window.charts.updateAccelerometerDisplay === "function"
-        ) {
-          window.charts.updateAccelerometerDisplay(accel.x, accel.y, accel.z);
-        } else {
-          console.warn(
-            "Charts module or updateAccelerometerDisplay function not available"
-          );
-        }
-
-        if (
-          window.charts &&
-          typeof window.charts.updateGyroscopeDisplay === "function"
-        ) {
-          window.charts.updateGyroscopeDisplay(gyro.x, gyro.y, gyro.z);
-        } else {
-          console.warn(
-            "Charts module or updateGyroscopeDisplay function not available"
-          );
-        }
-      }
-
-      // Update behavior data
-      if (data.behavior) {
-        this.processBehaviorData(data.behavior);
-      }
-
-      // Update OBD metrics if available
-      if (data.obd_data) {
-        this.updateOBDMetrics(data.obd_data);
-      }
-
-      // Update system health
-      if (data.system_health) {
-        this.updateSystemHealth(data.system_health);
-      }
-    } catch (error) {
-      console.error("Error processing data:", error);
-      this.logError("data", `Error processing data: ${error.message}`);
-    }
   }
 
   processBehaviorData(behavior) {

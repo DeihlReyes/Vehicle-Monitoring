@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 import json
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +20,52 @@ class RidingSession:
 class DatabaseManager:
     def __init__(self, db_path: str = "vehicle_data.db"):
         self.db_path = db_path
+        self.connection_pool = {}  # Connection pool for thread safety
+        self.max_connections = 5
         self.initialize_database()
 
     def get_connection(self):
-        """Create a database connection with error handling, WAL mode, and higher timeout"""
+        """
+        Create a database connection with connection pooling and WAL mode for better performance
+        """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=30)
+            # Get thread ID to ensure thread safety
+            thread_id = threading.get_ident()
+            
+            # Check if we already have a connection for this thread
+            if thread_id in self.connection_pool and self.connection_pool[thread_id] is not None:
+                try:
+                    # Test the existing connection with a simple query
+                    self.connection_pool[thread_id].execute("SELECT 1")
+                    return self.connection_pool[thread_id]
+                except Exception:
+                    # Connection is stale, remove it
+                    del self.connection_pool[thread_id]
+            
+            # Create a new connection if needed
+            conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
             conn.row_factory = sqlite3.Row  # Enable row factory for named columns
-            # Enable WAL mode for better concurrency
-            conn.execute("PRAGMA journal_mode=WAL;")
+            
+            # Performance optimizations
+            conn.execute("PRAGMA journal_mode=WAL;")  # WAL mode for better concurrency
+            conn.execute("PRAGMA synchronous=NORMAL;")  # Less durability but better performance
+            conn.execute("PRAGMA cache_size=10000;")  # Larger cache (in pages)
+            conn.execute("PRAGMA temp_store=MEMORY;")  # Store temp tables in memory
+            conn.execute("PRAGMA mmap_size=30000000;")  # 30MB memory mapping
+            
+            # Store in connection pool
+            self.connection_pool[thread_id] = conn
+            
+            # Clean up pool if it gets too large
+            if len(self.connection_pool) > self.max_connections:
+                old_connections = list(self.connection_pool.items())[:-self.max_connections]
+                for old_id, old_conn in old_connections:
+                    try:
+                        old_conn.close()
+                    except:
+                        pass
+                    del self.connection_pool[old_id]
+                    
             return conn
         except Exception as e:
             logger.error(f"Failed to connect to database: {str(e)}")
@@ -156,16 +194,34 @@ class DatabaseManager:
             logger.error(f"Failed to end session {session_id}: {str(e)}")
             raise
 
-    def store_sensor_data(self, session_id: int, accelerometer: Dict, gyroscope: Dict):
-        """Store sensor readings in the database"""
+    def batch_store_sensor_data(self, session_id: int, data_points: list):
+        """Store multiple sensor data points in a single transaction"""
+        if not data_points:
+            return
+            
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(
+                cursor.executemany(
                     "INSERT INTO sensor_data (session_id, timestamp, accelerometer_data, gyroscope_data) VALUES (?, ?, ?, ?)",
-                    (session_id, datetime.now(), json.dumps(accelerometer), json.dumps(gyroscope))
+                    [(session_id, point['timestamp'], json.dumps(point['accelerometer']), json.dumps(point['gyroscope'])) 
+                     for point in data_points]
                 )
                 conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to batch store sensor data: {str(e)}")
+            raise
+
+    def store_sensor_data(self, session_id: int, accelerometer: Dict, gyroscope: Dict):
+        """Store sensor readings in the database"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO sensor_data (session_id, timestamp, accelerometer_data, gyroscope_data) VALUES (?, ?, ?, ?)",
+                (session_id, datetime.now(), json.dumps(accelerometer), json.dumps(gyroscope))
+            )
+            conn.commit()
         except Exception as e:
             logger.error(f"Failed to store sensor data: {str(e)}")
             raise

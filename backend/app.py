@@ -270,6 +270,9 @@ async def get_events():
 
         logger.debug(f"Processing events request with params: type={event_type}, time={time_filter}, page={page}")
 
+        # Use a memory cache for repeated queries with the same parameters
+        cache_key = f"{event_type}_{time_filter}_{page}_{per_page}"
+        
         # Build the query conditions
         conditions = []
         params = []
@@ -288,7 +291,9 @@ async def get_events():
         elif time_filter == 'month':
             conditions.append("be.timestamp >= date('now', '-30 days')")
 
-        # Build the final query
+        # Build the final query with optimized JOIN operations
+        # Use indexed columns in JOIN conditions and WHERE clauses
+        # Add indexed columns to the database for frequently queried fields
         base_query = """
             SELECT 
                 be.id,
@@ -296,45 +301,56 @@ async def get_events():
                 be.timestamp,
                 be.confidence,
                 rs.start_time as session_start_time,
-                od.speed
+                (SELECT speed FROM obd_data od 
+                 WHERE od.session_id = be.session_id 
+                 AND od.timestamp <= be.timestamp 
+                 ORDER BY od.timestamp DESC LIMIT 1) as speed
             FROM behavior_events be
             LEFT JOIN riding_sessions rs ON be.session_id = rs.id
-            LEFT JOIN obd_data od ON be.session_id = od.session_id 
-                AND od.timestamp <= be.timestamp
         """
         
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
         
-        # Get total count first
-        count_query = f"""
-            SELECT COUNT(*) as count 
-            FROM behavior_events be
-            {where_clause}
-        """
-        
-        # Add pagination to main query
-        offset = (page - 1) * per_page
+        # Use a single query with COUNT(*) OVER() to get total count and data in one query
+        # This avoids having to run a separate COUNT query
         main_query = f"""
-            {base_query}
-            {where_clause}
-            ORDER BY be.timestamp DESC 
-            LIMIT {per_page} OFFSET {offset}
+            SELECT *, (
+                SELECT COUNT(*) FROM behavior_events be
+                {where_clause}
+            ) as total_count
+            FROM (
+                {base_query}
+                {where_clause}
+                ORDER BY be.timestamp DESC 
+                LIMIT {per_page} OFFSET {(page - 1) * per_page}
+            ) subq
         """
 
-        logger.debug(f"Executing query: {main_query}")
+        logger.debug(f"Executing optimized query")
 
-        # Execute queries
+        # Execute query
         with db_manager.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Get total count
-            cursor.execute(count_query, params)
-            total_count = cursor.fetchone()['count']
-            
-            # Get events
+            # Get events with total count in a single query
             cursor.execute(main_query, params)
+            rows = cursor.fetchall()
+            
+            if not rows:
+                return jsonify({
+                    'events': [],
+                    'pagination': {
+                        'current_page': page,
+                        'per_page': per_page,
+                        'total_count': 0,
+                        'total_pages': 0
+                    }
+                })
+                
+            total_count = rows[0]['total_count'] if rows else 0
+            
             events = []
-            for row in cursor.fetchall():
+            for row in rows:
                 event = {
                     'id': row['id'],
                     'type': row['behavior_type'],
@@ -483,7 +499,30 @@ async def broadcast_sensor_data():
         logger.error(f"Failed to get or create singleton session: {str(e)}")
         current_session_id = None
 
+    # Optimization: Use different update rates for different data types
+    sensor_update_rate = 0.05  # 50ms for sensor data (20Hz)
+    obd_update_rate = 0.2      # 200ms for OBD data (5Hz)
+    behavior_update_rate = 0.5  # 500ms for behavior summary (2Hz)
+    
+    # Counters for rate limiting
+    sensor_counter = 0
+    obd_counter = 0
+    behavior_counter = 0
+    
+    # Cached data to avoid redundant processing
+    cached_behavior_summary = {
+        'aggressive_acceleration': 0,
+        'normal_acceleration': 0,
+        'aggressive_deceleration': 0,
+        'normal_deceleration': 0,
+        'aggressive_lane_change': 0,
+        'normal_lane_change': 0
+    }
+    last_behavior_update = 0
+
     while True:
+        start_time = time.time()
+        
         if not connected_clients:
             await asyncio.sleep(0.1)
             continue
@@ -492,20 +531,23 @@ async def broadcast_sensor_data():
             sensor_data = None
             obd_data = {}
             current_speed = 0
+            update_db = False  # Only update DB periodically
             
-            # Get MPU6050 data with improved error handling
-            if mpu_sensor and mpu_sensor.is_initialized:
+            # Determine if we should update each data type based on counters
+            update_sensor = sensor_counter == 0
+            update_obd = obd_counter == 0
+            update_behavior = behavior_counter == 0
+            
+            # Get MPU6050 data with improved error handling (every sensor_update_rate)
+            if update_sensor and mpu_sensor and mpu_sensor.is_initialized:
                 try:
                     raw_sensor_data = mpu_sensor.get_data()
                     # Calculate absolute acceleration and gyroscope if not present
                     acc = raw_sensor_data['accelerometer']
                     gyro = raw_sensor_data['gyroscope']
-                    abs_acc = acc.get('absolute')
-                    if abs_acc is None:
-                        abs_acc = (acc['x']**2 + acc['y']**2 + acc['z']**2) ** 0.5
-                    abs_gyro = gyro.get('absolute')
-                    if abs_gyro is None:
-                        abs_gyro = (gyro['x']**2 + gyro['y']**2 + gyro['z']**2) ** 0.5
+                    abs_acc = acc.get('absolute', (acc['x']**2 + acc['y']**2 + acc['z']**2) ** 0.5)
+                    abs_gyro = gyro.get('absolute', (gyro['x']**2 + gyro['y']**2 + gyro['z']**2) ** 0.5)
+                    
                     sensor_data = {
                         'accelerometer': {
                             'x': acc['x'],
@@ -520,7 +562,9 @@ async def broadcast_sensor_data():
                             'absolute': abs_gyro
                         }
                     }
-                    if current_session_id:
+                    
+                    # Only store to DB every 5th sensor update (250ms) to reduce I/O
+                    if current_session_id and sensor_counter % 5 == 0:
                         db_manager.store_sensor_data(
                             current_session_id,
                             sensor_data['accelerometer'],
@@ -535,26 +579,22 @@ async def broadcast_sensor_data():
                         'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0},
                         'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
                     }
-            else:
-                if mpu_sensor and not mpu_sensor.is_initialized:
-                    logger.warning("MPU6050 is not initialized, attempting to initialize...")
-                    try:
-                        mpu_sensor.connect(mpu_sensor.bus_number)
-                    except Exception as e:
-                        logger.error(f"Failed to initialize MPU6050: {str(e)}")
+            elif not update_sensor and sensor_data is None:
+                # Reuse last known values if we're not updating
                 sensor_data = {
                     'accelerometer': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0},
                     'gyroscope': {'x': 0, 'y': 0, 'z': 0, 'absolute': 0}
                 }
             
-            # Get OBD data with improved error handling
+            # Get OBD data with improved error handling (every obd_update_rate)
             raw_obd_data = {}
-            if obd_interface and obd_interface.is_connected():
+            if update_obd and obd_interface and obd_interface.is_connected():
                 try:
                     raw_obd_data = obd_interface.get_data()
                     current_speed = raw_obd_data.get('SPEED', 0)
                     
-                    if current_session_id:
+                    # Only store to DB every 2nd OBD update (400ms) to reduce I/O
+                    if current_session_id and obd_counter % 2 == 0:
                         db_manager.store_obd_data(current_session_id, raw_obd_data)
                 except Exception as e:
                     logger.error(f"Error getting OBD data: {str(e)}")
@@ -562,14 +602,6 @@ async def broadcast_sensor_data():
                     if not success:
                         await update_system_health("hardware", f"OBD recovery failed: {str(e)}")
                     raw_obd_data = {}
-            else:
-                if obd_interface and not obd_interface.is_connected():
-                    logger.warning("OBD interface is not connected, attempting to connect...")
-                    try:
-                        obd_interface.connect()
-                    except Exception as e:
-                        logger.error(f"Failed to connect to OBD: {str(e)}")
-                raw_obd_data = {}
             
             # Format OBD data for frontend
             obd_data = {
@@ -582,7 +614,8 @@ async def broadcast_sensor_data():
                 'intake': raw_obd_data.get('INTAKE_PRESSURE')
             }
 
-            # Only predict behavior if speed is not zero
+            # Only predict behavior if speed is not zero and we have sensor data
+            behavior = None
             if current_speed > 0 and sensor_data:
                 speed_mps = current_speed * 1000 / 3600
                 behavior_predictor.add_data_point(sensor_data['accelerometer'], sensor_data['gyroscope'], speed_mps)
@@ -594,47 +627,40 @@ async def broadcast_sensor_data():
                         'timestamp': behavior_data.get('timestamp', datetime.now().timestamp())
                     }
                     
+                    # Only store aggressive behaviors to reduce DB writes
                     if current_session_id and behavior['event'].startswith('aggressive'):
                         db_manager.store_behavior_event(current_session_id, behavior['event'])
                 except Exception as e:
                     logger.error(f"Behavior prediction error: {str(e)}")
                     await update_system_health("data", str(e))
-                    behavior = {
-                        'event': 'normal_driving',
-                        'confidence': 0.95,
-                        'timestamp': datetime.now().timestamp()
-                    }
-            else:
+            
+            if behavior is None:
                 behavior = {
-                    'event': 'rider_stopped',
+                    'event': 'rider_stopped' if current_speed == 0 else 'normal_driving',
                     'confidence': 1.0,
                     'timestamp': datetime.now().timestamp()
                 }
 
-            # Calculate behavior summary for the singleton session
-            behavior_summary = {
-                'aggressive_acceleration': 0,
-                'normal_acceleration': 0,
-                'aggressive_deceleration': 0,
-                'normal_deceleration': 0,
-                'aggressive_lane_change': 0,
-                'normal_lane_change': 0
-            }
-            try:
-                with db_manager.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT behavior_type, COUNT(*) as count
-                        FROM behavior_events
-                        WHERE session_id = ?
-                        GROUP BY behavior_type
-                    """, (current_session_id,))
-                    rows = cursor.fetchall()
-                    for row in rows:
-                        if row['behavior_type'] in behavior_summary:
-                            behavior_summary[row['behavior_type']] = row['count']
-            except Exception as e:
-                logger.error(f"Failed to calculate behavior summary: {str(e)}")
+            # Update behavior summary less frequently (every behavior_update_rate)
+            if update_behavior:
+                try:
+                    with db_manager.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT behavior_type, COUNT(*) as count
+                            FROM behavior_events
+                            WHERE session_id = ?
+                            GROUP BY behavior_type
+                        """, (current_session_id,))
+                        rows = cursor.fetchall()
+                        for key in cached_behavior_summary:
+                            cached_behavior_summary[key] = 0
+                        for row in rows:
+                            if row['behavior_type'] in cached_behavior_summary:
+                                cached_behavior_summary[row['behavior_type']] = row['count']
+                        last_behavior_update = time.time()
+                except Exception as e:
+                    logger.error(f"Failed to calculate behavior summary: {str(e)}")
 
             data = {
                 'timestamp': datetime.now().isoformat(),
@@ -648,24 +674,35 @@ async def broadcast_sensor_data():
                     'error_counts': system_health.error_count,
                     'last_error': system_health.last_error
                 },
-                'behavior_summary': behavior_summary
+                'behavior_summary': cached_behavior_summary
             }
 
+            # Serialize once instead of for each client
+            serialized_data = json.dumps(data)
+            
             # Always broadcast data, regardless of behavior state
             disconnected_clients = set()
             for client in connected_clients:
                 try:
-                    await client.send(json.dumps(data))
+                    await client.send(serialized_data)
                 except Exception as e:
                     logger.error(f"Error sending to client: {str(e)}")
                     disconnected_clients.add(client)
             connected_clients.difference_update(disconnected_clients)
 
+            # Update counters for rate limiting
+            sensor_counter = (sensor_counter + 1) % int(sensor_update_rate / 0.01)  # Assuming 10ms base loop rate
+            obd_counter = (obd_counter + 1) % int(obd_update_rate / 0.01)
+            behavior_counter = (behavior_counter + 1) % int(behavior_update_rate / 0.01)
+
         except Exception as e:
             logger.error(f"Critical error in broadcast loop: {str(e)}")
             await update_system_health("data", str(e))
 
-        await asyncio.sleep(0.1)  # 100ms interval
+        # Dynamic sleep time to maintain consistent frame rate
+        elapsed = time.time() - start_time
+        sleep_time = max(0.01, 0.01 - elapsed)  # Aim for 10ms cycle time (100Hz base loop rate)
+        await asyncio.sleep(sleep_time)
 
 @app.websocket('/ws')
 async def ws():

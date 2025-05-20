@@ -396,94 +396,223 @@ class App {
         document.getElementById("event-type-filter")?.value || "all";
       const timeFilter = document.getElementById("time-filter")?.value || "all";
 
-      console.log("Fetching events with params:", {
-        type: eventType,
-        time: timeFilter,
-        page: this.currentEventsPage,
-      });
+      // Create cache key for this query
+      const cacheKey = `events_${eventType}_${timeFilter}_${this.currentEventsPage}`;
 
-      // Get the base URL from the current window location
-      const hostname = window.location.hostname || "localhost";
-      const url = `${window.location.protocol}//${hostname}:8000/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`;
+      // Check if we have cached data for this query
+      const cachedData = sessionStorage.getItem(cacheKey);
+      let data;
 
-      console.log("Fetching from URL:", url);
+      if (cachedData) {
+        // Use cached data
+        console.log("Using cached events data");
+        data = JSON.parse(cachedData);
+      } else {
+        // Fetch fresh data
+        console.log("Fetching events with params:", {
+          type: eventType,
+          time: timeFilter,
+          page: this.currentEventsPage,
+        });
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      });
+        const hostname = window.location.hostname || "localhost";
+        const url = `${window.location.protocol}//${hostname}:8000/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`;
 
-      console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response data:", data);
+        console.log("Fetching from URL:", url);
 
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        try {
+          const response = await fetch(url, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          console.log("Response status:", response.status);
+          data = await response.json();
+          console.log("Response data:", data);
+
+          if (!response.ok) {
+            throw new Error(
+              data.error || `HTTP error! status: ${response.status}`
+            );
+          }
+
+          // Cache the response for future use
+          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === "AbortError") {
+            throw new Error("Request timed out. Please try again.");
+          }
+          throw fetchError;
+        }
       }
 
       if (clearList) {
+        // Use document fragment for better performance
+        const fragment = document.createDocumentFragment();
         eventsList.innerHTML = "";
-      }
 
-      if (!data.events || data.events.length === 0) {
-        eventsList.innerHTML +=
-          '<div class="historical-event-item">No events found</div>';
-        loadMoreBtn.style.display = "none";
-        return;
-      }
-
-      // Add events to the list
-      data.events.forEach((event) => {
-        const eventItem = document.createElement("div");
-        eventItem.className = "historical-event-item";
-
-        let eventIcon = "🚗"; // Default icon
-        switch (event.type) {
-          case "aggressive_acceleration":
-            eventIcon = "🚀";
-            break;
-          case "normal_acceleration":
-            eventIcon = "✅";
-            break;
-          case "aggressive_deceleration":
-            eventIcon = "🛑";
-            break;
-          case "normal_deceleration":
-            eventIcon = "🟢";
-            break;
-          case "aggressive_lane_change":
-            eventIcon = "↔️";
-            break;
-          case "normal_lane_change":
-            eventIcon = "➡️";
-            break;
+        if (!data.events || data.events.length === 0) {
+          const noEventsItem = document.createElement("div");
+          noEventsItem.className = "historical-event-item";
+          noEventsItem.textContent = "No events found";
+          fragment.appendChild(noEventsItem);
+          eventsList.appendChild(fragment);
+          loadMoreBtn.style.display = "none";
+          return;
         }
 
-        const eventTime = new Date(event.timestamp).toLocaleString();
-        const eventSpeed = event.speed
-          ? `${event.speed.toFixed(1)} km/h`
-          : "N/A";
-        const confidence = event.confidence
-          ? `${(event.confidence * 100).toFixed(1)}%`
-          : "N/A";
+        // Reuse event elements for better memory efficiency
+        const renderEvent = (event) => {
+          const eventItem = document.createElement("div");
+          eventItem.className = "historical-event-item";
 
-        eventItem.innerHTML = `
-          <div class="event-details">
-            <span class="event-icon">${eventIcon}</span>
-            <div class="event-info">
-              <span class="event-type">${this.formatEventType(
-                event.type
-              )}</span>
-              <span class="event-metadata">Speed: ${eventSpeed} | Confidence: ${confidence}</span>
+          let eventIcon = "🚗"; // Default icon
+          switch (event.type) {
+            case "aggressive_acceleration":
+              eventIcon = "🚀";
+              break;
+            case "normal_acceleration":
+              eventIcon = "✅";
+              break;
+            case "aggressive_deceleration":
+              eventIcon = "🛑";
+              break;
+            case "normal_deceleration":
+              eventIcon = "🟢";
+              break;
+            case "aggressive_lane_change":
+              eventIcon = "↔️";
+              break;
+            case "normal_lane_change":
+              eventIcon = "➡️";
+              break;
+          }
+
+          const eventTime = new Date(event.timestamp).toLocaleString();
+          const eventSpeed = event.speed
+            ? `${event.speed.toFixed(1)} km/h`
+            : "N/A";
+          const confidence = event.confidence
+            ? `${(event.confidence * 100).toFixed(1)}%`
+            : "N/A";
+
+          // Avoid innerHTML for better performance
+          const eventDetails = document.createElement("div");
+          eventDetails.className = "event-details";
+
+          const iconSpan = document.createElement("span");
+          iconSpan.className = "event-icon";
+          iconSpan.textContent = eventIcon;
+
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "event-info";
+
+          const typeSpan = document.createElement("span");
+          typeSpan.className = "event-type";
+          typeSpan.textContent = this.formatEventType(event.type);
+
+          const metaSpan = document.createElement("span");
+          metaSpan.className = "event-metadata";
+          metaSpan.textContent = `Speed: ${eventSpeed} | Confidence: ${confidence}`;
+
+          infoDiv.appendChild(typeSpan);
+          infoDiv.appendChild(metaSpan);
+
+          eventDetails.appendChild(iconSpan);
+          eventDetails.appendChild(infoDiv);
+
+          const timestampSpan = document.createElement("span");
+          timestampSpan.className = "event-timestamp";
+          timestampSpan.textContent = eventTime;
+
+          eventItem.appendChild(eventDetails);
+          eventItem.appendChild(timestampSpan);
+
+          return eventItem;
+        };
+
+        // Use requestAnimationFrame for smoother rendering when adding many events
+        const renderEvents = (events, startIdx = 0) => {
+          const chunkSize = 5; // Process 5 events per frame
+          const endIdx = Math.min(startIdx + chunkSize, events.length);
+
+          for (let i = startIdx; i < endIdx; i++) {
+            fragment.appendChild(renderEvent(events[i]));
+          }
+
+          if (endIdx < events.length) {
+            // Process next chunk in next animation frame
+            requestAnimationFrame(() => renderEvents(events, endIdx));
+          } else {
+            // Done with all events, append fragment to DOM
+            eventsList.appendChild(fragment);
+          }
+        };
+
+        renderEvents(data.events);
+      } else {
+        // Add new events to existing list
+        const fragment = document.createDocumentFragment();
+        data.events.forEach((event) => {
+          const eventItem = document.createElement("div");
+          eventItem.className = "historical-event-item";
+
+          let eventIcon = "🚗"; // Default icon
+          switch (event.type) {
+            case "aggressive_acceleration":
+              eventIcon = "🚀";
+              break;
+            case "normal_acceleration":
+              eventIcon = "✅";
+              break;
+            case "aggressive_deceleration":
+              eventIcon = "🛑";
+              break;
+            case "normal_deceleration":
+              eventIcon = "🟢";
+              break;
+            case "aggressive_lane_change":
+              eventIcon = "↔️";
+              break;
+            case "normal_lane_change":
+              eventIcon = "➡️";
+              break;
+          }
+
+          const eventTime = new Date(event.timestamp).toLocaleString();
+          const eventSpeed = event.speed
+            ? `${event.speed.toFixed(1)} km/h`
+            : "N/A";
+          const confidence = event.confidence
+            ? `${(event.confidence * 100).toFixed(1)}%`
+            : "N/A";
+
+          eventItem.innerHTML = `
+            <div class="event-details">
+              <span class="event-icon">${eventIcon}</span>
+              <div class="event-info">
+                <span class="event-type">${this.formatEventType(
+                  event.type
+                )}</span>
+                <span class="event-metadata">Speed: ${eventSpeed} | Confidence: ${confidence}</span>
+              </div>
             </div>
-          </div>
-          <span class="event-timestamp">${eventTime}</span>
-        `;
+            <span class="event-timestamp">${eventTime}</span>
+          `;
 
-        eventsList.appendChild(eventItem);
-      });
+          fragment.appendChild(eventItem);
+        });
+        eventsList.appendChild(fragment);
+      }
 
       // Update load more button
       loadMoreBtn.style.display =
