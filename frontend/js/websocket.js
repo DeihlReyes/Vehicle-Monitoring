@@ -387,13 +387,13 @@ class WebSocketHandler {
           msg = "No battery data available";
           cls = "danger";
         } else if (voltageValue < 12.0) {
-          msg = "Warning: Weak or failing battery (< 12.0V)";
+          msg = "Weak battery (< 12.0V)";
           cls = "danger";
         } else if (voltageValue > 14.5) {
-          msg = "Warning: Overcharging (> 14.5V)";
+          msg = "Overcharging (> 14.5V)";
           cls = "warning";
         } else {
-          msg = "Battery voltage normal (12.0V - 14.5V)";
+          msg = "Normal (12.0V - 14.5V)";
           cls = "normal";
         }
 
@@ -431,16 +431,16 @@ class WebSocketHandler {
           msg = "No coolant data available";
           cls = "danger";
         } else if (coolantValue < 48 || coolantValue > 110) {
-          msg = "Danger: Coolant out of range (< 48°C or > 110°C)";
+          msg = "Coolant out of range (< 48°C or > 110°C)";
           cls = "danger";
         } else if (
           (coolantValue >= 48 && coolantValue < 54) ||
           (coolantValue > 104 && coolantValue <= 110)
         ) {
-          msg = "Warning: Near limit (48-54°C or 104-110°C)";
+          msg = "Near limit (48-54°C or 104-110°C)";
           cls = "warning";
         } else {
-          msg = "Coolant temperature normal (54°C - 104°C)";
+          msg = "Normal (54°C - 104°C)";
           cls = "normal";
         }
 
