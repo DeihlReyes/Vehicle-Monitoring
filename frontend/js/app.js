@@ -290,8 +290,9 @@ class App {
     // Battery health logic
     this.batteryVoltage = voltage;
     const healthMsg = document.getElementById("battery-health-message");
-    const flipBack = document.querySelector("#battery-card .flip-card-back");
-    const flipFront = document.querySelector("#battery-card .flip-card-front");
+    const batteryCard = document.getElementById("battery-card");
+    const flipBack = batteryCard.querySelector(".flip-card-back");
+    const flipFront = batteryCard.querySelector(".flip-card-front");
 
     if (healthMsg) {
       let msg = "Normal";
@@ -318,54 +319,36 @@ class App {
         cls = "normal";
       }
 
-      // Update both message and card appearance
+      // Update message and its class
       healthMsg.textContent = msg;
       healthMsg.className = `battery-health-message ${cls}`;
 
-      // Remove all possible classes first from both front and back
+      // Update card colors
       if (flipBack) {
-        flipBack.classList.remove("normal", "warning", "danger");
-        flipBack.classList.add(cls);
+        flipBack.className = `flip-card-back ${cls}`;
       }
       if (flipFront) {
-        flipFront.classList.remove("normal", "warning", "danger");
-        flipFront.classList.add(cls);
-      }
-
-      // Also update the front and back card colors
-      const frontCard = document.querySelector(
-        "#battery-card .flip-card-front"
-      );
-      const backCard = document.querySelector("#battery-card .flip-card-back");
-
-      if (frontCard) {
-        frontCard.classList.remove("normal", "warning", "danger");
-        frontCard.classList.add(cls);
-      }
-      if (backCard) {
-        backCard.classList.remove("normal", "warning", "danger");
-        backCard.classList.add(cls);
+        flipFront.className = `flip-card-front ${cls}`;
       }
     }
 
     // Coolant health logic
     const coolantValue = data.coolant || data.COOLANT_TEMP;
     const coolantHealthMsg = document.getElementById("coolant-health-message");
-    const coolantFlipBack = document.querySelector(
-      "#coolant-card .flip-card-back"
-    );
-    const coolantFlipFront = document.querySelector(
-      "#coolant-card .flip-card-front"
-    );
+    const coolantCard = document.getElementById("coolant-card");
+    const coolantFlipBack = coolantCard.querySelector(".flip-card-back");
+    const coolantFlipFront = coolantCard.querySelector(".flip-card-front");
+
     if (coolantHealthMsg) {
       let msg = "Normal";
       let cls = "normal";
+
       if (
         typeof coolantValue !== "number" ||
         isNaN(coolantValue) ||
         coolantValue === 0
       ) {
-        msg = "Danger: Coolant out of range (< 48°C or > 110°C)";
+        msg = "No coolant data available";
         cls = "danger";
       } else if (coolantValue < 48 || coolantValue > 110) {
         msg = "Danger: Coolant out of range (< 48°C or > 110°C)";
@@ -380,15 +363,17 @@ class App {
         msg = "Coolant temperature normal (54°C - 104°C)";
         cls = "normal";
       }
+
+      // Update message and its class
       coolantHealthMsg.textContent = msg;
       coolantHealthMsg.className = `coolant-health-message ${cls}`;
+
+      // Update card colors
       if (coolantFlipBack) {
-        coolantFlipBack.classList.remove("normal", "warning", "danger");
-        coolantFlipBack.classList.add(cls);
+        coolantFlipBack.className = `flip-card-back ${cls}`;
       }
       if (coolantFlipFront) {
-        coolantFlipFront.classList.remove("normal", "warning", "danger");
-        coolantFlipFront.classList.add(cls);
+        coolantFlipFront.className = `flip-card-front ${cls}`;
       }
     }
   }
