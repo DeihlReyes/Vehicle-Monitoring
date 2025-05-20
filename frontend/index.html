@@ -264,6 +264,10 @@
     <!-- Load scripts in correct order -->
     <script src="js/charts.js"></script>
     <script src="js/websocket.js"></script>
+    <script>
+      // Initialize WebSocket handler
+      window.wsHandler = new WebSocketHandler();
+    </script>
     <script src="js/app.js"></script>
 
     <!-- Remove the floating debug console and put script for handling logs -->

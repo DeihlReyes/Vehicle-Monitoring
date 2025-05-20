@@ -256,11 +256,17 @@ async def get_behavior_stats():
 async def get_events():
     """Get historical events with filtering and pagination"""
     try:
-        # Get query parameters
-        event_type = (await app.request.args.get('type', 'all')).lower()
-        time_filter = (await app.request.args.get('time', 'all')).lower()
-        page = int(await app.request.args.get('page', 1))
-        per_page = int(await app.request.args.get('per_page', 20))
+        # Get query parameters with proper error handling
+        try:
+            event_type = (await app.request.args.get('type', 'all')).lower()
+            time_filter = (await app.request.args.get('time', 'all')).lower()
+            page = int(await app.request.args.get('page', '1'))
+            per_page = int(await app.request.args.get('per_page', '20'))
+        except ValueError as e:
+            logger.error(f"Invalid query parameters: {str(e)}")
+            return jsonify({'error': 'Invalid query parameters'}), 400
+
+        logger.debug(f"Processing events request with params: type={event_type}, time={time_filter}, page={page}")
 
         # Build the query conditions
         conditions = []
@@ -268,20 +274,20 @@ async def get_events():
 
         # Event type filter
         if event_type == 'aggressive':
-            conditions.append("behavior_type LIKE 'aggressive%'")
+            conditions.append("be.behavior_type LIKE 'aggressive%'")
         elif event_type == 'normal':
-            conditions.append("behavior_type LIKE 'normal%'")
+            conditions.append("be.behavior_type LIKE 'normal%'")
 
         # Time filter
         if time_filter == 'today':
-            conditions.append("timestamp >= date('now', 'start of day')")
+            conditions.append("be.timestamp >= date('now', 'start of day')")
         elif time_filter == 'week':
-            conditions.append("timestamp >= date('now', '-7 days')")
+            conditions.append("be.timestamp >= date('now', '-7 days')")
         elif time_filter == 'month':
-            conditions.append("timestamp >= date('now', '-30 days')")
+            conditions.append("be.timestamp >= date('now', '-30 days')")
 
         # Build the final query
-        query = """
+        base_query = """
             SELECT 
                 be.id,
                 be.behavior_type,
@@ -291,24 +297,43 @@ async def get_events():
                 od.speed
             FROM behavior_events be
             LEFT JOIN riding_sessions rs ON be.session_id = rs.id
-            LEFT JOIN obd_data od ON be.session_id = od.session_id 
-                AND od.timestamp <= be.timestamp 
-                ORDER BY od.timestamp DESC 
-                LIMIT 1
+            LEFT JOIN (
+                SELECT DISTINCT ON (session_id, timestamp) *
+                FROM obd_data
+            ) od ON be.session_id = od.session_id 
+                AND od.timestamp <= be.timestamp
         """
         
-        if conditions:
-            query = query.replace("FROM behavior_events", 
-                                f"FROM behavior_events WHERE {' AND '.join(conditions)}")
-
-        # Add pagination
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+        
+        # Get total count first
+        count_query = f"""
+            SELECT COUNT(*) as count 
+            FROM behavior_events be
+            {where_clause}
+        """
+        
+        # Add pagination to main query
         offset = (page - 1) * per_page
-        query += f" ORDER BY be.timestamp DESC LIMIT {per_page} OFFSET {offset}"
+        main_query = f"""
+            {base_query}
+            {where_clause}
+            ORDER BY be.timestamp DESC 
+            LIMIT {per_page} OFFSET {offset}
+        """
 
-        # Execute query
+        logger.debug(f"Executing query: {main_query}")
+
+        # Execute queries
         with db_manager.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, params)
+            
+            # Get total count
+            cursor.execute(count_query, params)
+            total_count = cursor.fetchone()['count']
+            
+            # Get events
+            cursor.execute(main_query, params)
             events = []
             for row in cursor.fetchall():
                 event = {
@@ -321,14 +346,7 @@ async def get_events():
                 }
                 events.append(event)
 
-            # Get total count for pagination
-            count_query = "SELECT COUNT(*) as count FROM behavior_events"
-            if conditions:
-                count_query += f" WHERE {' AND '.join(conditions)}"
-            cursor.execute(count_query, params)
-            total_count = cursor.fetchone()['count']
-
-            return jsonify({
+            response_data = {
                 'events': events,
                 'pagination': {
                     'current_page': page,
@@ -336,10 +354,13 @@ async def get_events():
                     'total_count': total_count,
                     'total_pages': (total_count + per_page - 1) // per_page
                 }
-            })
+            }
+
+            logger.debug(f"Returning {len(events)} events")
+            return jsonify(response_data)
 
     except Exception as e:
-        logger.error(f"Failed to get events: {str(e)}")
+        logger.error(f"Failed to get events: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/sessions/current/latest_data')

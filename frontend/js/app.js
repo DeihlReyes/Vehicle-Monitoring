@@ -225,16 +225,16 @@ class App {
       return;
     }
 
-    window.wsHandler.onData((data) => {
+    window.wsHandler.onData = (data) => {
       this.updateRealTimeData(data);
       if (data.behavior_summary) {
         this.updateBehaviorSummary(data.behavior_summary);
       }
-    });
+    };
 
-    window.wsHandler.onStatusChange((connected) => {
+    window.wsHandler.onStatusChange = (connected) => {
       this.updateConnectionStatus(connected);
-    });
+    };
   }
 
   async loadInitialData() {
@@ -382,7 +382,10 @@ class App {
 
     const eventsList = document.getElementById("historical-events-list");
     const loadMoreBtn = document.getElementById("load-more-events");
-    if (!eventsList || !loadMoreBtn) return;
+    if (!eventsList || !loadMoreBtn) {
+      console.error("Required DOM elements not found");
+      return;
+    }
 
     this.eventsLoading = true;
     loadMoreBtn.disabled = true;
@@ -393,17 +396,42 @@ class App {
         document.getElementById("event-type-filter")?.value || "all";
       const timeFilter = document.getElementById("time-filter")?.value || "all";
 
-      const response = await fetch(
-        `/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`
-      );
+      console.log("Fetching events with params:", {
+        type: eventType,
+        time: timeFilter,
+        page: this.currentEventsPage,
+      });
+
+      // Get the base URL from the current window location
+      const baseUrl = window.location.protocol + "//" + window.location.host;
+      const url = `${baseUrl}/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`;
+
+      console.log("Fetching from URL:", url);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      console.log("Response status:", response.status);
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to load events");
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
 
       if (clearList) {
         eventsList.innerHTML = "";
+      }
+
+      if (!data.events || data.events.length === 0) {
+        eventsList.innerHTML +=
+          '<div class="historical-event-item">No events found</div>';
+        loadMoreBtn.style.display = "none";
+        return;
       }
 
       // Add events to the list
@@ -462,6 +490,10 @@ class App {
         this.currentEventsPage < data.pagination.total_pages ? "block" : "none";
     } catch (error) {
       console.error("Failed to load events:", error);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+      });
       eventsList.innerHTML +=
         '<div class="error-message">Failed to load events. Please try again.</div>';
     } finally {

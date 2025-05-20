@@ -1,115 +1,113 @@
 // WebSocket connection handler
 class WebSocketHandler {
-  constructor(url) {
-    console.log(`Initializing WebSocketHandler with URL: ${url}`);
-    this.url = url;
-    this.socket = null;
+  constructor() {
+    this.ws = null;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
-    this.reconnectDelay = 2000;
-    this.dataCallbacks = [];
-    this.statusCallbacks = [];
-
-    // System status tracking
-    this.systemStatus = {
-      websocket_connected: false,
-      mpu_sensor_ok: true,
-      obd_connection_ok: true,
-      error_count: 0,
-      hardware_errors: 0,
-      data_errors: 0,
-      connection_errors: 0,
-      last_error: "",
-    };
-
-    // Behavior tracking
+    this.reconnectDelay = 1000; // Start with 1 second delay
     this.behaviorStats = {
+      total: 0,
       aggressive_acceleration: 0,
       normal_acceleration: 0,
       aggressive_deceleration: 0,
       normal_deceleration: 0,
       aggressive_lane_change: 0,
       normal_lane_change: 0,
-      total: 0,
       recent_events: [],
     };
-
-    // Connect immediately
-    this.connect();
-
-    // Set up auto-reconnect
-    setInterval(() => this.checkConnection(), 5000);
+    this.initializeWebSocket();
   }
 
-  connect() {
+  initializeWebSocket() {
     try {
-      console.log(`Connecting to WebSocket at ${this.url}...`);
-      this.socket = new WebSocket(this.url);
+      // Get the base URL from the current window location
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host || window.location.hostname;
+      const wsUrl = `${protocol}//${host}/ws`;
 
-      this.socket.onopen = this.onOpen.bind(this);
-      this.socket.onclose = this.onClose.bind(this);
-      this.socket.onerror = this.onError.bind(this);
-      this.socket.onmessage = this.onMessage.bind(this);
+      console.log("Initializing WebSocket connection to:", wsUrl);
+
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onopen = () => {
+        console.log("WebSocket connection established");
+        this.reconnectAttempts = 0;
+        this.reconnectDelay = 1000;
+        this.onConnectionChange(true);
+      };
+
+      this.ws.onclose = () => {
+        console.log("WebSocket connection closed");
+        this.onConnectionChange(false);
+        this.attemptReconnect();
+      };
+
+      this.ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        this.onConnectionChange(false);
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.processWebSocketData(data);
+        } catch (error) {
+          console.error("Error processing WebSocket message:", error);
+        }
+      };
     } catch (error) {
-      console.error("Error connecting to WebSocket:", error);
-      this.logError("connection", `Failed to connect: ${error.message}`);
-      this.systemStatus.websocket_connected = false;
-      this.updateSystemStatus();
+      console.error("Error initializing WebSocket:", error);
+      this.attemptReconnect();
     }
   }
 
-  onOpen(event) {
-    console.log("WebSocket connection established");
-    this.systemStatus.websocket_connected = true;
-    this.reconnectAttempts = 0;
+  // System status tracking
+  systemStatus = {
+    websocket_connected: false,
+    mpu_sensor_ok: true,
+    obd_connection_ok: true,
+    error_count: 0,
+    hardware_errors: 0,
+    data_errors: 0,
+    connection_errors: 0,
+    last_error: "",
+  };
+
+  // Behavior tracking
+  behaviorStats = {
+    aggressive_acceleration: 0,
+    normal_acceleration: 0,
+    aggressive_deceleration: 0,
+    normal_deceleration: 0,
+    aggressive_lane_change: 0,
+    normal_lane_change: 0,
+    total: 0,
+    recent_events: [],
+  };
+
+  onConnectionChange(connected) {
+    this.systemStatus.websocket_connected = connected;
     this.updateSystemStatus();
-    this.notifyStatusCallbacks({ connected: true });
   }
 
-  onClose(event) {
-    console.log(`WebSocket connection closed (${event.code}: ${event.reason})`);
-    this.systemStatus.websocket_connected = false;
-    this.updateSystemStatus();
-    this.notifyStatusCallbacks({ connected: false });
+  attemptReconnect() {
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * this.reconnectAttempts;
+    console.log(
+      `Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`
+    );
 
-    // Attempt reconnection if not closed normally
-    if (
-      event.code !== 1000 &&
-      this.reconnectAttempts < this.maxReconnectAttempts
-    ) {
-      this.scheduleReconnect();
-    }
-  }
-
-  onError(error) {
-    console.error("WebSocket error:", error);
-    this.logError("connection", "WebSocket connection error");
-    this.systemStatus.websocket_connected = false;
-    this.updateSystemStatus();
-  }
-
-  onMessage(event) {
-    try {
-      // Limit logging for performance
-      if (Math.random() < 0.1) {
-        // Log approximately 10% of messages
-        const shortData =
-          event.data.length > 100
-            ? event.data.substring(0, 100) + "..."
-            : event.data;
-        console.log(`Received data: ${shortData}`);
+    setTimeout(() => {
+      if (!this.systemStatus.websocket_connected) {
+        console.log(
+          `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+        );
+        this.initializeWebSocket();
       }
-
-      const data = JSON.parse(event.data);
-      this.processData(data);
-      this.notifyDataCallbacks(data);
-    } catch (error) {
-      console.error("Error processing message:", error);
-      this.logError("data", `Failed to process message: ${error.message}`);
-    }
+    }, delay);
   }
 
-  processData(data) {
+  processWebSocketData(data) {
     try {
       // Debug log the incoming data
       console.log("Received sensor data:", data.sensor_data);
@@ -601,88 +599,6 @@ class WebSocketHandler {
     }
   }
 
-  scheduleReconnect() {
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * this.reconnectAttempts;
-    console.log(
-      `Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`
-    );
-
-    setTimeout(() => {
-      if (!this.systemStatus.websocket_connected) {
-        console.log(
-          `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-        );
-        this.connect();
-      }
-    }, delay);
-  }
-
-  checkConnection() {
-    if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        console.log("Connection check failed, reconnecting...");
-        this.connect();
-      }
-    }
-  }
-
-  send(data) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify(data));
-      } catch (error) {
-        console.error("Error sending data:", error);
-        this.logError("connection", `Failed to send data: ${error.message}`);
-      }
-    } else {
-      console.error("WebSocket not connected, cannot send data");
-      this.logError("connection", "Cannot send data: WebSocket not connected");
-    }
-  }
-
-  registerDataCallback(callback) {
-    if (typeof callback === "function") {
-      this.dataCallbacks.push(callback);
-      console.log(
-        `Registered data callback, total callbacks: ${this.dataCallbacks.length}`
-      );
-      return true;
-    }
-    return false;
-  }
-
-  registerStatusCallback(callback) {
-    if (typeof callback === "function") {
-      this.statusCallbacks.push(callback);
-      console.log(
-        `Registered status callback, total callbacks: ${this.statusCallbacks.length}`
-      );
-      return true;
-    }
-    return false;
-  }
-
-  notifyDataCallbacks(data) {
-    this.dataCallbacks.forEach((callback) => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error("Error in data callback:", error);
-      }
-    });
-  }
-
-  notifyStatusCallbacks(status) {
-    this.statusCallbacks.forEach((callback) => {
-      try {
-        callback(status);
-      } catch (error) {
-        console.error("Error in status callback:", error);
-      }
-    });
-  }
-
   reset() {
     console.log("Resetting WebSocket connection and error counts");
 
@@ -697,12 +613,12 @@ class WebSocketHandler {
     this.updateSystemStatus();
 
     // Force reconnection
-    if (this.socket) {
-      this.socket.close();
+    if (this.ws) {
+      this.ws.close();
     }
 
     this.reconnectAttempts = 0;
-    setTimeout(() => this.connect(), 1000);
+    setTimeout(() => this.initializeWebSocket(), 1000);
   }
 
   logError(type, message) {
@@ -737,16 +653,8 @@ let websocketHandler = null;
 function setupWebSocket() {
   console.log("Setting up WebSocket connection");
 
-  // Determine the WebSocket URL
-  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsHost = window.location.hostname || "localhost";
-  const wsPort = 8000; // Backend WebSocket port
-  const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws`;
-
-  console.log(`Connecting to WebSocket at ${wsUrl}`);
-
   // Create WebSocket handler
-  websocketHandler = new WebSocketHandler(wsUrl);
+  websocketHandler = new WebSocketHandler();
 
   // Set up reconnect button functionality
   const reconnectBtn = document.getElementById("reconnect-btn");

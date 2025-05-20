@@ -10,11 +10,12 @@ source venv/bin/activate
 cd backend
 python app.py &
 
-# Wait for the server to start
-sleep 5
+# Wait a bit for backend to initialize
+sleep 2
 
-# Start the browser in kiosk mode
-chromium-browser --kiosk --incognito --noerrdialogs --disable-translate http://localhost:5000
+# Start the frontend server
+cd ../frontend
+python server.py &
 
-# If browser is closed, kill the backend server
-kill $(lsof -t -i:5000) 
+# Keep the script running
+wait 
