@@ -292,24 +292,37 @@ class App {
     const healthMsg = document.getElementById("battery-health-message");
     const flipBack = document.querySelector("#battery-card .flip-card-back");
     const flipFront = document.querySelector("#battery-card .flip-card-front");
+
     if (healthMsg) {
       let msg = "Normal";
       let cls = "normal";
-      if (typeof voltage !== "number" || isNaN(voltage) || voltage === 0) {
+
+      // Parse voltage as float and ensure it's a valid number
+      const voltageValue = parseFloat(voltage);
+
+      if (
+        typeof voltageValue !== "number" ||
+        isNaN(voltageValue) ||
+        voltageValue === 0
+      ) {
+        msg = "No battery data available";
+        cls = "danger";
+      } else if (voltageValue < 12.0) {
         msg = "Warning: Weak or failing battery (< 12.0V)";
         cls = "danger";
-      } else if (voltage < 12.0) {
-        msg = "Warning: Weak or failing battery (< 12.0V)";
-        cls = "danger";
-      } else if (voltage > 14.5) {
+      } else if (voltageValue > 14.5) {
         msg = "Warning: Overcharging (> 14.5V)";
         cls = "warning";
       } else {
         msg = "Battery voltage normal (12.0V - 14.5V)";
         cls = "normal";
       }
+
+      // Update both message and card appearance
       healthMsg.textContent = msg;
       healthMsg.className = `battery-health-message ${cls}`;
+
+      // Remove all possible classes first from both front and back
       if (flipBack) {
         flipBack.classList.remove("normal", "warning", "danger");
         flipBack.classList.add(cls);
@@ -317,6 +330,21 @@ class App {
       if (flipFront) {
         flipFront.classList.remove("normal", "warning", "danger");
         flipFront.classList.add(cls);
+      }
+
+      // Also update the front and back card colors
+      const frontCard = document.querySelector(
+        "#battery-card .flip-card-front"
+      );
+      const backCard = document.querySelector("#battery-card .flip-card-back");
+
+      if (frontCard) {
+        frontCard.classList.remove("normal", "warning", "danger");
+        frontCard.classList.add(cls);
+      }
+      if (backCard) {
+        backCard.classList.remove("normal", "warning", "danger");
+        backCard.classList.add(cls);
       }
     }
 
