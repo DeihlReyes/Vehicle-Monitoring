@@ -214,13 +214,15 @@ class App {
   }
 
   updateRealTimeData(data) {
-    // Update motion data charts
+    // Update motion data displays
     if (data.sensor_data && window.charts) {
-      if (typeof window.charts.updateAccelerometerChart === "function") {
-        window.charts.updateAccelerometerChart(data.sensor_data.accelerometer);
+      if (typeof window.charts.updateAccelerometerDisplay === "function") {
+        const accel = data.sensor_data.accelerometer;
+        window.charts.updateAccelerometerDisplay(accel.x, accel.y, accel.z);
       }
-      if (typeof window.charts.updateGyroscopeChart === "function") {
-        window.charts.updateGyroscopeChart(data.sensor_data.gyroscope);
+      if (typeof window.charts.updateGyroscopeDisplay === "function") {
+        const gyro = data.sensor_data.gyroscope;
+        window.charts.updateGyroscopeDisplay(gyro.x, gyro.y, gyro.z);
       }
     }
 

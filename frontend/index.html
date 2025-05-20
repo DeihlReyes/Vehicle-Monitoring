@@ -67,14 +67,42 @@
         <div class="sensor-grid">
           <div class="sensor-chart">
             <h3>Accelerometer Data</h3>
-            <div class="chart-container">
-              <div id="accelerometer-chart"></div>
+            <div class="sensor-data-container">
+              <div class="sensor-value">
+                <span class="axis-label">X:</span>
+                <span id="accel-x" class="axis-value">0.00</span>
+                <span class="unit">g</span>
+              </div>
+              <div class="sensor-value">
+                <span class="axis-label">Y:</span>
+                <span id="accel-y" class="axis-value">0.00</span>
+                <span class="unit">g</span>
+              </div>
+              <div class="sensor-value">
+                <span class="axis-label">Z:</span>
+                <span id="accel-z" class="axis-value">0.00</span>
+                <span class="unit">g</span>
+              </div>
             </div>
           </div>
           <div class="sensor-chart">
             <h3>Gyroscope Data</h3>
-            <div class="chart-container">
-              <div id="gyroscope-chart"></div>
+            <div class="sensor-data-container">
+              <div class="sensor-value">
+                <span class="axis-label">X:</span>
+                <span id="gyro-x" class="axis-value">0.00</span>
+                <span class="unit">deg/s</span>
+              </div>
+              <div class="sensor-value">
+                <span class="axis-label">Y:</span>
+                <span id="gyro-y" class="axis-value">0.00</span>
+                <span class="unit">deg/s</span>
+              </div>
+              <div class="sensor-value">
+                <span class="axis-label">Z:</span>
+                <span id="gyro-z" class="axis-value">0.00</span>
+                <span class="unit">deg/s</span>
+              </div>
             </div>
           </div>
           <div class="current-behavior">
@@ -667,6 +695,43 @@
         .chart-container {
           max-width: 900px;
         }
+      }
+
+      .sensor-data-container {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .sensor-value {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1.2rem;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+      }
+
+      .axis-label {
+        font-weight: bold;
+        color: #495057;
+        width: 30px;
+      }
+
+      .axis-value {
+        font-family: monospace;
+        color: #212529;
+        flex-grow: 1;
+      }
+
+      .unit {
+        color: #6c757d;
+        font-size: 0.9rem;
       }
     </style>
   </body>
