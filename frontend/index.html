@@ -165,6 +165,36 @@
         </div>
       </div>
 
+      <!-- Events Tab -->
+      <div class="tab-content hidden" id="events-tab">
+        <div class="events-container">
+          <div class="events-header">
+            <h2>Riding Events History</h2>
+            <div class="events-filters">
+              <select id="event-type-filter">
+                <option value="all">All Events</option>
+                <option value="aggressive">Aggressive Events</option>
+                <option value="normal">Normal Events</option>
+              </select>
+              <select id="time-filter">
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+                <option value="all">All Time</option>
+              </select>
+            </div>
+          </div>
+          <div class="events-list-container">
+            <div id="historical-events-list"></div>
+          </div>
+          <div class="events-pagination">
+            <button id="load-more-events" class="load-more-btn">
+              Load More
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- System Info Tab -->
       <div class="tab-content hidden" id="system-tab">
         <div class="system-info-container">
@@ -217,6 +247,10 @@
         <button class="nav-btn" data-tab="obd">
           <span class="nav-icon">🔧</span>
           <span>OBD Info</span>
+        </button>
+        <button class="nav-btn" data-tab="events">
+          <span class="nav-icon">📝</span>
+          <span>Events</span>
         </button>
         <!--
         <button class="nav-btn" data-tab="system">
@@ -732,6 +766,134 @@
       .unit {
         color: #6c757d;
         font-size: 0.9rem;
+      }
+
+      /* Events Tab Styles */
+      .events-container {
+        padding: 15px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      .events-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .events-filters {
+        display: flex;
+        gap: 10px;
+      }
+
+      .events-filters select {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+      }
+
+      .events-list-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      #historical-events-list {
+        max-height: calc(100vh - 250px);
+        overflow-y: auto;
+      }
+
+      .historical-event-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s;
+      }
+
+      .historical-event-item:hover {
+        background-color: #f8f9fa;
+      }
+
+      .historical-event-item:last-child {
+        border-bottom: none;
+      }
+
+      .event-details {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .event-icon {
+        font-size: 1.5em;
+      }
+
+      .event-info {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .event-type {
+        font-weight: bold;
+        color: #333;
+      }
+
+      .event-metadata {
+        font-size: 0.9em;
+        color: #666;
+      }
+
+      .event-timestamp {
+        color: #666;
+        font-size: 0.9em;
+      }
+
+      .load-more-btn {
+        width: 100%;
+        padding: 10px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 0 0 8px 8px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .load-more-btn:hover {
+        background: #0056b3;
+      }
+
+      .load-more-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      @media (max-width: 600px) {
+        .events-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .events-filters {
+          flex-direction: column;
+        }
+
+        .historical-event-item {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 10px;
+        }
+
+        .event-timestamp {
+          align-self: flex-end;
+        }
       }
     </style>
   </body>

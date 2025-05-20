@@ -88,6 +88,8 @@ class App {
   constructor() {
     this.currentTab = "dashboard";
     this.batteryVoltage = null;
+    this.currentEventsPage = 1;
+    this.eventsLoading = false;
     this.initializeApp();
   }
 
@@ -149,6 +151,12 @@ class App {
         this.loadAndRenderLogs();
       }
 
+      // If events tab, load events
+      if (tabId === "events") {
+        this.currentEventsPage = 1;
+        this.loadEvents(true);
+      }
+
       // Trigger resize event for charts
       if (window.charts && typeof window.charts.handleResize === "function") {
         setTimeout(() => window.charts.handleResize(), 100);
@@ -181,6 +189,32 @@ class App {
     if (coolantCard) {
       coolantCard.addEventListener("click", () => {
         coolantCard.classList.toggle("flipped");
+      });
+    }
+
+    // Events tab filters
+    const eventTypeFilter = document.getElementById("event-type-filter");
+    const timeFilter = document.getElementById("time-filter");
+    const loadMoreBtn = document.getElementById("load-more-events");
+
+    if (eventTypeFilter) {
+      eventTypeFilter.addEventListener("change", () => {
+        this.currentEventsPage = 1;
+        this.loadEvents(true);
+      });
+    }
+
+    if (timeFilter) {
+      timeFilter.addEventListener("change", () => {
+        this.currentEventsPage = 1;
+        this.loadEvents(true);
+      });
+    }
+
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener("click", () => {
+        this.currentEventsPage++;
+        this.loadEvents(false);
       });
     }
   }
@@ -341,6 +375,107 @@ class App {
     if (window.charts && typeof window.charts.handleResize === "function") {
       window.charts.handleResize();
     }
+  }
+
+  async loadEvents(clearList = true) {
+    if (this.eventsLoading) return;
+
+    const eventsList = document.getElementById("historical-events-list");
+    const loadMoreBtn = document.getElementById("load-more-events");
+    if (!eventsList || !loadMoreBtn) return;
+
+    this.eventsLoading = true;
+    loadMoreBtn.disabled = true;
+    loadMoreBtn.textContent = "Loading...";
+
+    try {
+      const eventType =
+        document.getElementById("event-type-filter")?.value || "all";
+      const timeFilter = document.getElementById("time-filter")?.value || "all";
+
+      const response = await fetch(
+        `/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load events");
+      }
+
+      if (clearList) {
+        eventsList.innerHTML = "";
+      }
+
+      // Add events to the list
+      data.events.forEach((event) => {
+        const eventItem = document.createElement("div");
+        eventItem.className = "historical-event-item";
+
+        let eventIcon = "🚗"; // Default icon
+        switch (event.type) {
+          case "aggressive_acceleration":
+            eventIcon = "🚀";
+            break;
+          case "normal_acceleration":
+            eventIcon = "✅";
+            break;
+          case "aggressive_deceleration":
+            eventIcon = "🛑";
+            break;
+          case "normal_deceleration":
+            eventIcon = "🟢";
+            break;
+          case "aggressive_lane_change":
+            eventIcon = "↔️";
+            break;
+          case "normal_lane_change":
+            eventIcon = "➡️";
+            break;
+        }
+
+        const eventTime = new Date(event.timestamp).toLocaleString();
+        const eventSpeed = event.speed
+          ? `${event.speed.toFixed(1)} km/h`
+          : "N/A";
+        const confidence = event.confidence
+          ? `${(event.confidence * 100).toFixed(1)}%`
+          : "N/A";
+
+        eventItem.innerHTML = `
+          <div class="event-details">
+            <span class="event-icon">${eventIcon}</span>
+            <div class="event-info">
+              <span class="event-type">${this.formatEventType(
+                event.type
+              )}</span>
+              <span class="event-metadata">Speed: ${eventSpeed} | Confidence: ${confidence}</span>
+            </div>
+          </div>
+          <span class="event-timestamp">${eventTime}</span>
+        `;
+
+        eventsList.appendChild(eventItem);
+      });
+
+      // Update load more button
+      loadMoreBtn.style.display =
+        this.currentEventsPage < data.pagination.total_pages ? "block" : "none";
+    } catch (error) {
+      console.error("Failed to load events:", error);
+      eventsList.innerHTML +=
+        '<div class="error-message">Failed to load events. Please try again.</div>';
+    } finally {
+      this.eventsLoading = false;
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.textContent = "Load More";
+    }
+  }
+
+  formatEventType(type) {
+    return type
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   }
 }
 

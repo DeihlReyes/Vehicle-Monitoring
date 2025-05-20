@@ -252,6 +252,96 @@ async def get_behavior_stats():
         logger.error(f"Failed to get behavior statistics: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/events')
+async def get_events():
+    """Get historical events with filtering and pagination"""
+    try:
+        # Get query parameters
+        event_type = (await app.request.args.get('type', 'all')).lower()
+        time_filter = (await app.request.args.get('time', 'all')).lower()
+        page = int(await app.request.args.get('page', 1))
+        per_page = int(await app.request.args.get('per_page', 20))
+
+        # Build the query conditions
+        conditions = []
+        params = []
+
+        # Event type filter
+        if event_type == 'aggressive':
+            conditions.append("behavior_type LIKE 'aggressive%'")
+        elif event_type == 'normal':
+            conditions.append("behavior_type LIKE 'normal%'")
+
+        # Time filter
+        if time_filter == 'today':
+            conditions.append("timestamp >= date('now', 'start of day')")
+        elif time_filter == 'week':
+            conditions.append("timestamp >= date('now', '-7 days')")
+        elif time_filter == 'month':
+            conditions.append("timestamp >= date('now', '-30 days')")
+
+        # Build the final query
+        query = """
+            SELECT 
+                be.id,
+                be.behavior_type,
+                be.timestamp,
+                be.confidence,
+                rs.start_time as session_start_time,
+                od.speed
+            FROM behavior_events be
+            LEFT JOIN riding_sessions rs ON be.session_id = rs.id
+            LEFT JOIN obd_data od ON be.session_id = od.session_id 
+                AND od.timestamp <= be.timestamp 
+                ORDER BY od.timestamp DESC 
+                LIMIT 1
+        """
+        
+        if conditions:
+            query = query.replace("FROM behavior_events", 
+                                f"FROM behavior_events WHERE {' AND '.join(conditions)}")
+
+        # Add pagination
+        offset = (page - 1) * per_page
+        query += f" ORDER BY be.timestamp DESC LIMIT {per_page} OFFSET {offset}"
+
+        # Execute query
+        with db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            events = []
+            for row in cursor.fetchall():
+                event = {
+                    'id': row['id'],
+                    'type': row['behavior_type'],
+                    'timestamp': row['timestamp'],
+                    'confidence': row['confidence'],
+                    'session_start_time': row['session_start_time'],
+                    'speed': row['speed']
+                }
+                events.append(event)
+
+            # Get total count for pagination
+            count_query = "SELECT COUNT(*) as count FROM behavior_events"
+            if conditions:
+                count_query += f" WHERE {' AND '.join(conditions)}"
+            cursor.execute(count_query, params)
+            total_count = cursor.fetchone()['count']
+
+            return jsonify({
+                'events': events,
+                'pagination': {
+                    'current_page': page,
+                    'per_page': per_page,
+                    'total_count': total_count,
+                    'total_pages': (total_count + per_page - 1) // per_page
+                }
+            })
+
+    except Exception as e:
+        logger.error(f"Failed to get events: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/sessions/current/latest_data')
 async def get_current_session_latest_data():
     """Return the latest sensor, OBD, and behavior data for the singleton session (cumulative)."""
