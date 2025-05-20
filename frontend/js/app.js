@@ -403,8 +403,8 @@ class App {
       });
 
       // Get the base URL from the current window location
-      const baseUrl = window.location.protocol + "//" + window.location.host;
-      const url = `${baseUrl}/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`;
+      const hostname = window.location.hostname || "localhost";
+      const url = `${window.location.protocol}//${hostname}:8000/events?type=${eventType}&time=${timeFilter}&page=${this.currentEventsPage}&per_page=20`;
 
       console.log("Fetching from URL:", url);
 

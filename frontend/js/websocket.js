@@ -22,8 +22,8 @@ class WebSocketHandler {
     try {
       // Get the base URL from the current window location
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = window.location.host || window.location.hostname;
-      const wsUrl = `${protocol}//${host}/ws`;
+      const hostname = window.location.hostname || "localhost";
+      const wsUrl = `${protocol}//${hostname}:8000/ws`; // Explicitly use backend port
 
       console.log("Initializing WebSocket connection to:", wsUrl);
 

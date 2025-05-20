@@ -1,7 +1,16 @@
 from flask import Flask, send_from_directory
+from flask_cors import CORS
 import os
 
 app = Flask(__name__)
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "allow_headers": ["Content-Type"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": True
+    }
+})
 
 @app.route('/')
 def serve_index():
@@ -12,4 +21,4 @@ def serve_files(path):
     return send_from_directory('.', path)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000) 
+    app.run(host='0.0.0.0', port=5000, debug=True) 
