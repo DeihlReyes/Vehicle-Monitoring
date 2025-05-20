@@ -23,36 +23,44 @@ class WebSocketHandler {
       // Get the base URL from the current window location
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const hostname = window.location.hostname || "localhost";
-      const wsUrl = `${protocol}//${hostname}:8000/ws`; // Explicitly use backend port
+      const wsUrl = `${protocol}//${hostname}:8000/ws`;
 
       console.log("Initializing WebSocket connection to:", wsUrl);
 
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log("WebSocket connection established");
+        console.log("WebSocket connection established successfully");
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
         this.onConnectionChange(true);
       };
 
-      this.ws.onclose = () => {
-        console.log("WebSocket connection closed");
+      this.ws.onclose = (event) => {
+        console.log(
+          "WebSocket connection closed. Code:",
+          event.code,
+          "Reason:",
+          event.reason
+        );
         this.onConnectionChange(false);
         this.attemptReconnect();
       };
 
       this.ws.onerror = (error) => {
         console.error("WebSocket error:", error);
+        console.log("WebSocket readyState:", this.ws.readyState);
         this.onConnectionChange(false);
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log("Received WebSocket data:", data);
           this.processWebSocketData(data);
         } catch (error) {
           console.error("Error processing WebSocket message:", error);
+          console.log("Raw message data:", event.data);
         }
       };
     } catch (error) {

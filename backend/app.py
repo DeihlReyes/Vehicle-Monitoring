@@ -258,10 +258,12 @@ async def get_events():
     try:
         # Get query parameters with proper error handling
         try:
-            event_type = (await app.request.args.get('type', 'all')).lower()
-            time_filter = (await app.request.args.get('time', 'all')).lower()
-            page = int(await app.request.args.get('page', '1'))
-            per_page = int(await app.request.args.get('per_page', '20'))
+            from quart import request
+            args = request.args
+            event_type = args.get('type', 'all').lower()
+            time_filter = args.get('time', 'all').lower()
+            page = int(args.get('page', '1'))
+            per_page = int(args.get('per_page', '20'))
         except ValueError as e:
             logger.error(f"Invalid query parameters: {str(e)}")
             return jsonify({'error': 'Invalid query parameters'}), 400
@@ -297,10 +299,7 @@ async def get_events():
                 od.speed
             FROM behavior_events be
             LEFT JOIN riding_sessions rs ON be.session_id = rs.id
-            LEFT JOIN (
-                SELECT DISTINCT ON (session_id, timestamp) *
-                FROM obd_data
-            ) od ON be.session_id = od.session_id 
+            LEFT JOIN obd_data od ON be.session_id = od.session_id 
                 AND od.timestamp <= be.timestamp
         """
         
