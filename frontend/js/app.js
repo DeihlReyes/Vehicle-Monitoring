@@ -267,114 +267,11 @@ class App {
   }
 
   updateOBDDisplay(data) {
-    const updateElement = (id, value, unit = "") => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.textContent =
-          value !== null && value !== undefined
-            ? `${value.toFixed(1)}${unit}`
-            : "N/A";
-      }
-    };
-
-    // Handle either direct properties (from websocket) or nested ones (from API)
-    updateElement("rpm-value", data.rpm || data.RPM);
-    updateElement("speed-value", data.speed || data.SPEED, " km/h");
-    updateElement("throttle-value", data.throttle || data.THROTTLE_POS, "%");
-    updateElement("coolant-temp", data.coolant || data.COOLANT_TEMP, "°C");
-    updateElement("intake-temp", data.intake || data.INTAKE_PRESSURE, " kPa");
-    const voltage = data.battery || data.CONTROL_MODULE_VOLTAGE;
-    updateElement("battery-voltage", voltage, "V");
-    updateElement("engine-load", data.engineLoad || data.ENGINE_LOAD, "%");
-
-    // Battery health logic
-    this.batteryVoltage = voltage;
-    const healthMsg = document.getElementById("battery-health-message");
-    const batteryCard = document.getElementById("battery-card");
-    const flipBack = batteryCard.querySelector(".flip-card-back");
-    const flipFront = batteryCard.querySelector(".flip-card-front");
-
-    if (healthMsg) {
-      let msg = "Normal";
-      let cls = "normal";
-
-      // Parse voltage as float and ensure it's a valid number
-      const voltageValue = parseFloat(voltage);
-
-      if (
-        typeof voltageValue !== "number" ||
-        isNaN(voltageValue) ||
-        voltageValue === 0
-      ) {
-        msg = "No battery data available";
-        cls = "danger";
-      } else if (voltageValue < 12.0) {
-        msg = "Warning: Weak or failing battery (< 12.0V)";
-        cls = "danger";
-      } else if (voltageValue > 14.5) {
-        msg = "Warning: Overcharging (> 14.5V)";
-        cls = "warning";
-      } else {
-        msg = "Battery voltage normal (12.0V - 14.5V)";
-        cls = "normal";
-      }
-
-      // Update message and its class
-      healthMsg.textContent = msg;
-      healthMsg.className = `battery-health-message ${cls}`;
-
-      // Update card colors
-      if (flipBack) {
-        flipBack.className = `flip-card-back ${cls}`;
-      }
-      if (flipFront) {
-        flipFront.className = `flip-card-front ${cls}`;
-      }
-    }
-
-    // Coolant health logic
-    const coolantValue = data.coolant || data.COOLANT_TEMP;
-    const coolantHealthMsg = document.getElementById("coolant-health-message");
-    const coolantCard = document.getElementById("coolant-card");
-    const coolantFlipBack = coolantCard.querySelector(".flip-card-back");
-    const coolantFlipFront = coolantCard.querySelector(".flip-card-front");
-
-    if (coolantHealthMsg) {
-      let msg = "Normal";
-      let cls = "normal";
-
-      if (
-        typeof coolantValue !== "number" ||
-        isNaN(coolantValue) ||
-        coolantValue === 0
-      ) {
-        msg = "No coolant data available";
-        cls = "danger";
-      } else if (coolantValue < 48 || coolantValue > 110) {
-        msg = "Danger: Coolant out of range (< 48°C or > 110°C)";
-        cls = "danger";
-      } else if (
-        (coolantValue >= 48 && coolantValue < 54) ||
-        (coolantValue > 104 && coolantValue <= 110)
-      ) {
-        msg = "Warning: Near limit (48-54°C or 104-110°C)";
-        cls = "warning";
-      } else {
-        msg = "Coolant temperature normal (54°C - 104°C)";
-        cls = "normal";
-      }
-
-      // Update message and its class
-      coolantHealthMsg.textContent = msg;
-      coolantHealthMsg.className = `coolant-health-message ${cls}`;
-
-      // Update card colors
-      if (coolantFlipBack) {
-        coolantFlipBack.className = `flip-card-back ${cls}`;
-      }
-      if (coolantFlipFront) {
-        coolantFlipFront.className = `flip-card-front ${cls}`;
-      }
+    // If we have a WebSocket handler, use its update function
+    if (window.wsHandler) {
+      window.wsHandler.updateOBDMetrics(data);
+    } else {
+      console.warn("WebSocket handler not available for OBD updates");
     }
   }
 
