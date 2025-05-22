@@ -436,17 +436,11 @@ class WebSocketHandler {
         ) {
           msg = "No coolant data available";
           cls = "danger";
-        } else if (coolantValue < 48 || coolantValue > 110) {
-          msg = "Coolant out of range (< 48°C or > 110°C)";
+        } else if (coolantValue > 104) {
+          msg = "Overheating (> 104°C)";
           cls = "danger";
-        } else if (
-          (coolantValue >= 48 && coolantValue < 54) ||
-          (coolantValue > 104 && coolantValue <= 110)
-        ) {
-          msg = "Near limit (48-54°C or 104-110°C)";
-          cls = "warning";
         } else {
-          msg = "Normal (54°C - 104°C)";
+          msg = "Normal";
           cls = "normal";
         }
 
