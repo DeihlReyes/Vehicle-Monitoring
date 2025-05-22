@@ -393,7 +393,7 @@ class WebSocketHandler {
           msg = "No battery data available";
           cls = "danger";
         } else if (voltageValue < 12.0) {
-          msg = "Weak battery (< 12.0V)";
+          msg = "Degraded Battery (For Replacement)";
           cls = "danger";
         } else if (voltageValue > 14.5) {
           msg = "Overcharging (> 14.5V)";
